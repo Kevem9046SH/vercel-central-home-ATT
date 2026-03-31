@@ -1,0 +1,271 @@
+================================================================================
+  CHECKLIST DE MELHORIAS — CENTRAL HOME K
+  Baseado no Diagnóstico Completo (27/03/2026)
+  Ordem: IMPACTO ÷ ESFORÇO (maior retorno primeiro)
+================================================================================
+
+  Legenda:
+  [ ] = Pendente
+  [/] = Em andamento
+  [x] = Concluído
+  ⚡ = Quick Win (< 1h)  |  🔴 = Bug / Crítico  |  🟠 = Alta Prioridade
+  🟡 = Média Prioridade  |  🔵 = Melhoria futura  |  🎨 = Design
+
+================================================================================
+  FASE 1 — CORREÇÕES URGENTES (Bugs ativos, risco de crash)
+  Tempo estimado: ~3h
+================================================================================
+
+  [x] 🔴⚡ 1.1  CRASH DOS PILARES — Adicionar `links: []` em cada pilar em
+                INITIAL_PILLARS (central-home.jsx, linhas 47–52)
+                + Adicionar fallback `(pillar.links || []).map(...)` em
+                PillarDetail (linha 269)
+
+  [x] 🔴⚡ 1.2  DARK MODE QUEBRADO — Substituir referências a LIGHT_THEME
+                nos dados estáticos (INITIAL_PILLARS, INITIAL_PROJECTS)
+                por chaves semânticas resolvidas dinamicamente pelo tema T
+
+  [x] 🟠⚡ 1.3  GOOGLE FONTS — Mover o @import de fontes do JSX para
+                o index.html como <link rel="preconnect"> + <link rel="stylesheet">
+                (elimina FOUC e melhora performance de carregamento)
+
+  [x] 🟠⚡ 1.4  TRANSIÇÕES GLOBAIS — Remover o seletor universal
+                `* { transition: ... }` do style tag inline no JSX
+                (causa lag em dispositivos lentos)
+
+  [x] 🟠⚡ 1.5  INDEX.CSS — Limpar o index.css (remover font-family padrão
+                que conflita com a DM Sans inline)
+
+================================================================================
+  FASE 2 — FUNCIONALIDADES BÁSICAS FALTANDO (prometidas mas ausentes)
+  Tempo estimado: ~2–3 dias
+================================================================================
+
+  [x] 🔴  2.1  PILARES COM LINKS — sistema de links por pilar: adicionar URL
+                + título, abrir em nova aba, remover links
+
+  [x] 🟠  2.2  QUICK LINKS FUNCIONAIS — botões agora abrem URL configurada;
+                botão de lápis abre modal EditLinkModal; persistência no localStorage
+
+  [x] 🟠  2.3  COFRE DE RECURSOS REAL — sistema completo: adicionar/remover
+                itens, editar label e URL, clicar abre em nova aba
+
+  [x] 🟠  2.4  DESTAQUE DO DIA ATUAL NO SCHEDULE — coluna do dia atual
+                destacada com cor teal, borda e · no label
+                + Bug corrigido: DAYS agora usa chaves em inglês que
+                correspondem aos dados (monday, tuesday... antes era segunda...)
+
+  [x] 🟡  2.5  WIDGET "PRÓXIMA AULA" — (adiado para fase futura)
+
+  [x] 🟠  2.6  ATALHO DE TECLADO — Ctrl+N (ou Cmd+N) abre nota rápida
+                de qualquer tela do app
+
+  [x] 🟡  2.7  TOAST NOTIFICATIONS — banners flutuantes ao salvar nota,
+                criar projeto, remover item, etc.
+
+  [ ] 🟡  2.8  BARRA DE BUSCA — Adicionar campo de busca na seção de
+                Notas (filtrar por texto) e Projetos (filtrar por nome)
+
+  [ ] 🟡  2.9  ARQUIVAMENTO DE PROJETOS — Botão "Arquivar" nos projetos
+                concluídos (100%). Move para seção "Arquivo" separada,
+                sem deletar permanentemente.
+
+  [ ] 🟡  2.10 DEADLINE NOS PROJETOS — Campo de data de entrega opcional
+                por projeto. Se ultrapassado, exibir badge de alerta.
+
+================================================================================
+  FASE 3 — DESIGN E UX (impacto visual imediato)
+  Tempo estimado: ~2–3 dias
+================================================================================
+
+  [x] 🎨🟠 3.1  RESPONSIVIDADE MOBILE — Implementar layout responsivo:
+                - Grade 2 colunas → 1 coluna em telas < 768px
+                - Header adaptativo (nav escondido em menu hambúrguer no mobile)
+                - Cards full-width no mobile
+                - Schedule com scroll horizontal no mobile (já existe, mas melhorar)
+
+  [x] 🎨🟠 3.2  ÍCONES REAIS — Instalar lucide-react e substituir os
+                caracteres Unicode (◈ ◉ ◆ ◇) por ícones reais nos:
+                - Pilares (cada um com ícone temático)
+                - Projetos
+                - Modais
+                - Botões de ação (editar ✎ → PencilIcon, apagar ✕ → TrashIcon)
+
+  [ ] 🎨🟡 3.3  ANIMAÇÕES DE ENTRADA — Adicionar animação suave de
+                fade + slide quando cards aparecem na tela (CSS animations
+                com @keyframes ou pequena lib como framer-motion)
+
+  [ ] 🎨🟡 3.4  PROGRESS BAR ANIMADA — Animar a barra de progresso ao
+                mudar de valor (já tem `transition: width .4s ease` mas
+                sem animação de entrada na montagem)
+
+  [ ] 🎨🟡 3.5  FAVICON PERSONALIZADO — Criar/gerar ícone personalizado
+                para o app (substituir o vite.svg padrão). Pode ser um
+                ícone simples "CH" ou uma casa estilizada.
+
+  [ ] 🎨🟡 3.6  EMPTY STATES MELHORES — Melhorar as telas vazias:
+                - Projetos vazios: ícone + mensagem inspiracional + CTA
+                - Schedule sem aulas: mensagem de "Dia livre!"
+                - Notas: já está bom, manter como referência
+
+  [ ] 🎨🔵 3.7  WIDGET DE RELÓGIO/DATA — Mostrar horário atual em tempo
+                real na home (junto com a data)
+
+  [ ] 🎨🔵 3.8  BACKGROUND COM TEXTURA — Adicionar noise/grain sutil
+                ao fundo ou às seções para mais profundidade visual
+
+  [ ] 🎨🔵 3.9  MODO "FOCO" — Botão que esconde tudo e exibe apenas
+                um projeto ou nota selecionada (fullscreen focus mode)
+
+================================================================================
+  FASE 4 — QUALIDADE DE CÓDIGO E ARQUITETURA
+  Tempo estimado: ~1 semana
+================================================================================
+
+  [ ] 🟠  4.1  REFATORAR MONOLITO — Separar central-home.jsx em módulos:
+                /src/
+                  themes.js
+                  data/pillars.js
+                  data/projects.js
+                  data/schedule.js
+                  hooks/useLocalStorage.js
+                  components/Tag.jsx
+                  components/ProgressBar.jsx
+                  components/modals/NoteModal.jsx
+                  components/modals/AddProjectModal.jsx
+                  components/modals/EditProjectModal.jsx
+                  components/modals/AddPillarModal.jsx
+                  components/modals/EditPillarModal.jsx
+                  components/modals/PillarDetail.jsx
+                  components/Schedule/Schedule.jsx
+                  components/Schedule/ScheduleEditor.jsx
+                  pages/Home.jsx
+                  pages/Notes.jsx
+                  pages/Projects.jsx
+
+  [ ] 🟡  4.2  CSS VARIABLES — Migrar tokens de design para variáveis CSS
+                no index.css:
+                  :root { --teal: #0F6E56; --surface: #fff; ... }
+                  [data-theme="dark"] { --teal: #4DB8A8; ... }
+                Isso elimina a necessidade de passar T como prop em todos
+                os componentes.
+
+  [ ] 🟡  4.3  CORRIGIR COMPARAÇÃO DE TEMA FRÁGIL — Substituir padrão
+                `T.text === "#1A1916" ? "#fff" : "#000"` (15+ ocorrências)
+                por um campo explícito no tema: `T.buttonFg`
+
+  [ ] 🟡  4.4  CORRIGIR MUTAÇÃO DIRETA DE ESTADO — Refatorar saveCell()
+                em ScheduleEditor para não mutar arrays diretamente
+
+  [ ] 🟡  4.5  ADICIONAR ESLINT + PRETTIER — Configurar linting e
+                formatação automática (vite já facilita isso):
+                  npm install -D eslint eslint-plugin-react
+                  npm install -D prettier
+
+  [ ] 🔵  4.6  REMOVER HANDLERS INLINE DE MOUSE — Substituir todos os
+                onMouseEnter/onMouseLeave que manipulam style direto por
+                classes CSS com :hover (muito mais limpo e performático)
+
+  [ ] 🔵  4.7  PADRONIZAR NOMES DOS DIAS — Escolher um idioma (pt-BR)
+                para as chaves do schedule e padronizar:
+                monday → segunda / tuesday → terca (ou vice-versa)
+
+================================================================================
+  FASE 5 — ACESSIBILIDADE
+  Tempo estimado: ~1 dia
+================================================================================
+
+  [ ] 🟠⚡ 5.1  ARIA-LABEL NO BOTÃO DARK MODE — Adicionar
+                aria-label={isDarkMode ? "Ativar modo claro" : "Ativar modo escuro"}
+
+  [ ] 🟡  5.2  ROLE="DIALOG" NOS MODAIS — Adicionar role="dialog",
+                aria-modal="true" e aria-labelledby em todos os modais
+
+  [ ] 🟡  5.3  FOCO AUTOMÁTICO NOS MODAIS — Verificar/garantir que ao
+                abrir um modal, o foco vai para o primeiro input
+
+  [ ] 🟡  5.4  LABELS NOS INPUTS — Adicionar <label> ou aria-label
+                em todos os campos de input dos modais
+
+  [ ] 🟡  5.5  PROGRESS BAR ACESSÍVEL — Adicionar role="progressbar",
+                aria-valuenow, aria-valuemin, aria-valuemax nas barras
+
+  [ ] 🔵  5.6  NAVEGAÇÃO POR TECLADO — Garantir que todos os elementos
+                interativos são acessíveis via Tab e Enter/Espaço
+
+================================================================================
+  FASE 6 — MELHORIAS AVANÇADAS (médio/longo prazo)
+  Tempo estimado: 2–4 semanas
+================================================================================
+
+  [ ] 🔵  6.1  PWA (Progressive Web App) — Adicionar manifest.json e
+                service worker para uso offline e instalação no celular/desktop
+                como app nativo
+
+  [ ] 🔵  6.2  EXPORTAR DADOS — Botão para baixar todos os dados do
+                app como arquivo JSON (backup completo)
+
+  [ ] 🔵  6.3  IMPORTAR DADOS — Campo para subir arquivo JSON e
+                restaurar dados salvos anteriormente
+
+  [ ] 🔵  6.4  INDEXEDDB — Migrar do localStorage para IndexedDB para
+                suportar mais dados (notas longas, mais projetos, etc.)
+
+  [ ] 🔵  6.5  WEB NOTIFICATIONS — Integrar a API de Notificações do
+                browser para lembretes de próximas aulas e deadlines
+
+  [ ] 🔵  6.6  RASTREADOR DE HÁBITOS REAL — Implementar o módulo de
+                hábitos: criar hábito, marcar como feito no dia, streak,
+                visualização por semana
+
+  [ ] 🔵  6.7  LISTA DE COMPRAS REAL — Implementar o módulo de compras:
+                adicionar item, marcar como comprado, limpar lista
+
+  [ ] 🔵  6.8  TESTES AUTOMATIZADOS — Adicionar testes com Vitest +
+                Testing Library para as funções críticas (saveNote,
+                addProject, schedule logic)
+
+  [ ] 🔵  6.9  HISTÓRICO DE NOTAS (LIXEIRA) — Manter notas deletadas
+                por 7 dias antes de excluir permanentemente
+
+  [ ] 🔵  6.10 GOOGLE CALENDAR API — Integrar com Google Calendar para
+                mostrar eventos reais do dia junto ao schedule
+
+================================================================================
+  ORDEM RECOMENDADA DE EXECUÇÃO (VISÃO GERAL)
+================================================================================
+
+  HOJE (1–2h):    Fase 1 completa (1.1 → 1.5) — eliminar todos os bugs
+
+  DIA 2 (4–6h):   Fase 2 parcial (2.1, 2.2, 2.3, 2.4) — funcionalidades
+                  que mais faltam e mais frustram o usuário
+
+  DIA 3 (4–6h):   Fase 3 parcial (3.1, 3.2) — responsividade + ícones
+                  (maior impacto visual imediato)
+
+  SEMANA 1:       Fase 2 completa + Fase 3 completa + Fase 5 básica
+
+  SEMANA 2–3:     Fase 4 (refatoração, qualidade de código)
+
+  MÊS 2+:         Fase 6 (features avançadas, PWA, integrações)
+
+================================================================================
+  RESUMO DE PROGRESSO
+================================================================================
+
+  Total de itens:         42
+  Críticos/Urgentes:       5  (Fase 1)
+  Alta prioridade:        15  (Fases 2–3 parcial + Fase 5)
+  Média prioridade:       12  (Fases 3–4)
+  Futuros/Avançados:      10  (Fase 6)
+
+  [x] Fase 1 — Correções Urgentes        (5/5)
+  [x] Fase 2 — Funcionalidades Básicas   (7/10)
+  [/] Fase 3 — Design e UX               (2/9)
+  [ ] Fase 4 — Qualidade de Código       (0/7)
+  [ ] Fase 5 — Acessibilidade            (0/6)
+  [ ] Fase 6 — Melhorias Avançadas       (0/10)
+
+================================================================================
+  FIM DA CHECKLIST
+================================================================================

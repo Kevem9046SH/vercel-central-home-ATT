@@ -1,0 +1,659 @@
+================================================================================
+  RELATÓRIO DE DIAGNÓSTICO COMPLETO — CENTRAL HOME K
+  Data: 27/03/2026 | Versão do App: 0.0.1
+  Gerado por: Antigravity (Skills: vibe-code-auditor, frontend-design, react-patterns)
+================================================================================
+
+ESCOPO DO AUDIT
+───────────────
+Arquivos analisados:
+  - central-home.jsx     (817 linhas — componente principal)
+  - src/main.jsx         (11 linhas  — entry point)
+  - src/index.css        (19 linhas  — CSS global)
+  - index.html           (14 linhas  — HTML raiz)
+  - package.json         (20 linhas  — dependências)
+  - documentação.txt     (51 linhas  — plano do projeto)
+
+Stack: React 18 + Vite 4 | Idioma: Português (BR) | Modo: SPA
+
+Contexto: Dashboard de produtividade pessoal ("Single Point of Truth").
+          Uso: pessoal/local (1 usuário). Armazenamento: localStorage.
+
+================================================================================
+  SEÇÃO 1 — SUMÁRIO EXECUTIVO
+================================================================================
+
+Pontuação Geral de Produção: 62 / 100
+Nível: Deployável para uso pessoal/interno com monitoramento.
+
+Principais achados:
+
+  [HIGH]    O arquivo central-home.jsx tem 817 linhas — monolito crítico.
+            Toda a lógica, estado, dados e UI está em um único arquivo.
+
+  [HIGH]    PillarDetail (linha 257) referencia `pillar.links` que NÃO
+            EXISTE na estrutura de dados dos pilares (INITIAL_PILLARS).
+            Isso causa crash ao abrir qualquer pilar.
+
+  [HIGH]    O objeto INITIAL_PILLARS usa LIGHT_THEME hardcoded mesmo no
+            modo escuro — as cores dos tags quebram no Dark Mode.
+
+  [MEDIUM]  Sem responsividade mobile: o layout usa grid 2 colunas fixo
+            sem media queries. Em telas < 768px a interface quebra.
+
+  [MEDIUM]  Fontes carregadas via @import dentro de <style> dentro do JSX —
+            bloqueia re-render e gera Flash of Unstyled Content (FOUC).
+
+  [MEDIUM]  CSS global (index.css) conflita com o CSS inline do sistema:
+            a fonte definida em body é sobrescrita pelo inline, gerando
+            comportamento inconsistente entre elementos.
+
+  [LOW]     Nenhum arquivo de teste. Sem validação automatizada.
+
+  [LOW]     Sem tratamento de erro no localStorage (catch existe, mas
+            silencioso — falhas de quota não são reportadas ao usuário).
+
+================================================================================
+  SEÇÃO 2 — BUGS CRÍTICOS (Causam falha imediata)
+================================================================================
+
+BUG #1 — CRASH AO ABRIR PILARES
+─────────────────────────────────
+Severidade: [HIGH] — Crash confirmado
+
+Localização: central-home.jsx, linha 269
+  {pillar.links.map((l, i) => (
+
+Problema:
+  O componente PillarDetail tenta mapear `pillar.links`, mas NENHUM
+  objeto em INITIAL_PILLARS possui a propriedade `links`.
+  Estrutura real dos pilares (linha 48):
+    { id, icon, label, sub, tag, tagColor }
+  A propriedade `links` não existe → TypeError: Cannot read properties
+  of undefined (reading 'map') → tela branca ao clicar em qualquer pilar.
+
+Fix necessário:
+  Opção A: Adicionar `links: []` na estrutura de cada pilar em INITIAL_PILLARS.
+  Opção B: Adicionar fallback no componente:
+    {(pillar.links || []).map((l, i) => (
+
+──────────────────────────────────────────────────────────────────────────────
+
+BUG #2 — CORES QUEBRADAS NO DARK MODE (DADOS HARDCODED)
+──────────────────────────────────────────────────────────
+Severidade: [HIGH] — Visual incorreto garantido
+
+Localização: central-home.jsx, linhas 48–52 (INITIAL_PILLARS)
+  tagColor: [LIGHT_THEME.amber, LIGHT_THEME.amberBg]
+
+Problema:
+  As cores dos tags dos pilares são definidas com os valores de LIGHT_THEME
+  em tempo de compilação (são literais de objeto, não referências dinâmicas).
+  Mesmo com Dark Mode ativo, os pilares mostram as cores claras hardcoded.
+  O mesmo problema ocorre parcialmente com os projetos (INITIAL_PROJECTS,
+  linhas 55–58) que também usam LIGHT_THEME.teal, LIGHT_THEME.amber etc.
+
+Fix necessário:
+  Remover a referência ao tema dos dados estáticos e usar chaves semânticas:
+    tagColor: ["amber", "amberBg"]
+  E no render, resolver dinamicamente:
+    color={T[p.tagColor[0]]} bg={T[p.tagColor[1]]}
+
+──────────────────────────────────────────────────────────────────────────────
+
+BUG #3 — OPEN PILLAR PASSA OBJETO COM ESTRUTURA ERRADA
+────────────────────────────────────────────────────────
+Severidade: [MEDIUM]
+
+Localização: central-home.jsx, linha 599
+  onClick={() => setOpenPillar(p)}
+
+  E linha 813:
+  {openPillar && <PillarDetail pillar={openPillar} .../>}
+
+Problema:
+  setOpenPillar(p) passa o objeto completo do pilar, que não tem `links`.
+  PillarDetail espera um pilar com `links` (array). Resultado: crash
+  confirmado conforme BUG #1. Ambos os bugs estão relacionados.
+
+================================================================================
+  SEÇÃO 3 — PROBLEMAS DE ARQUITETURA
+================================================================================
+
+ARCH #1 — MONOLITO CRÍTICO (GOD FILE)
+───────────────────────────────────────
+Severidade: [HIGH]
+
+Localização: central-home.jsx (817 linhas, 1 arquivo)
+
+Problema:
+  Todo o projeto está em um único arquivo: temas, dados, helpers, 10+
+  componentes e o app principal. Isso viola totalmente o princípio de
+  separação de responsabilidades. Adicionar ou corrigir qualquer coisa
+  requer navegar centenas de linhas. O risco de efeitos colaterais
+  involuntários ao editar é alto.
+
+Componentes que deveriam ser arquivos separados:
+  - /src/themes.js          (LIGHT_THEME, DARK_THEME)
+  - /src/data/pillars.js    (INITIAL_PILLARS)
+  - /src/data/projects.js   (INITIAL_PROJECTS)
+  - /src/data/schedule.js   (INITIAL_SCHEDULE)
+  - /src/hooks/useLocalStorage.js
+  - /src/components/Tag.jsx
+  - /src/components/ProgressBar.jsx
+  - /src/components/modals/NoteModal.jsx
+  - /src/components/modals/AddProjectModal.jsx
+  - /src/components/modals/EditProjectModal.jsx
+  - /src/components/modals/AddPillarModal.jsx
+  - /src/components/modals/EditPillarModal.jsx
+  - /src/components/modals/PillarDetail.jsx
+  - /src/components/Schedule/Schedule.jsx
+  - /src/components/Schedule/ScheduleEditor.jsx
+  - /src/pages/Home.jsx
+  - /src/pages/Notes.jsx
+  - /src/pages/Projects.jsx
+
+──────────────────────────────────────────────────────────────────────────────
+
+ARCH #2 — ESTADO ACOPLADO NA RAIZ SEM GERENCIADOR
+────────────────────────────────────────────────────
+Severidade: [MEDIUM]
+
+Localização: central-home.jsx, linhas 489–537
+
+Problema:
+  Todos os estados (notes, projects, pillars, schedule, modals, activeSection)
+  vivem no componente raiz CentralHome e são passados via prop drilling.
+  Conforme o app cresce, isso se torna difícil de manter. Um Context API
+  ou Zustand seria mais adequado para o tamanho atual.
+
+──────────────────────────────────────────────────────────────────────────────
+
+ARCH #3 — DADOS MISTURADOS COM LÓGICA DE UI
+──────────────────────────────────────────────
+Severidade: [MEDIUM]
+
+Localização: central-home.jsx, linhas 46–113
+
+Problema:
+  INITIAL_PILLARS, INITIAL_PROJECTS, QUICK_LINKS, VAULT_ITEMS e
+  INITIAL_SCHEDULE são definidos no mesmo arquivo que os componentes React.
+  Dados de configuração/conteúdo deveriam estar em arquivos separados
+  (JSON ou módulos .js), facilitando edição sem risco de quebrar código.
+
+================================================================================
+  SEÇÃO 4 — PROBLEMAS DE DESIGN E UX
+================================================================================
+
+DESIGN #1 — SEM RESPONSIVIDADE MOBILE
+────────────────────────────────────────
+Severidade: [HIGH] — Quebra garantida em mobile
+
+Localização: central-home.jsx, linha 574
+  gridTemplateColumns: "1fr 1fr"
+
+Problema:
+  O layout principal usa 2 colunas fixas SEM nenhuma media query.
+  Em telas < 768px (celular/tablet), as colunas ficam espremidas ou
+  sobrepostas. O princípio do projeto é ser "agnóstico de plataforma"
+  (documentação.txt, linha 7), mas a implementação atual contradiz isso.
+
+Fix necessário:
+  Usar CSS Grid com auto-fit ou adicionar media queries:
+  gridTemplateColumns: window.innerWidth < 768 ? "1fr" : "1fr 1fr"
+  (Ou melhor: usar CSS classes com media queries no index.css)
+
+──────────────────────────────────────────────────────────────────────────────
+
+DESIGN #2 — GOOGLE FONTS CARREGADO VIA STYLE TAG DENTRO DE JSX
+────────────────────────────────────────────────────────────────
+Severidade: [MEDIUM] — Performance e FOUC
+
+Localização: central-home.jsx, linhas 541–542
+  <style>{`@import url('https://fonts.googleapis.com/...')`}</style>
+
+Problema:
+  A importação de fontes via @import dentro de uma tag <style> no JSX
+  é a pior forma possível de carregar fontes externas:
+  1. @import em CSS é bloqueante (aguarda renderização)
+  2. Dentro do JSX, recria a tag a cada re-render
+  3. Causa FOUC (Flash of Unstyled Content) — texto sem fonte aparece
+     por um instante antes das fontes carregarem
+  4. A transição CSS "* { transition: ... }" definida aqui é desnecessariamente
+     global e afeta TODOS os elementos, podendo causar lag.
+
+Fix necessário:
+  Mover os <link> das fontes para o index.html:
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:..." rel="stylesheet">
+
+──────────────────────────────────────────────────────────────────────────────
+
+DESIGN #3 — TRANSIÇÕES CSS GLOBAIS EXCESSIVAS
+───────────────────────────────────────────────
+Severidade: [MEDIUM] — Performance
+
+Localização: central-home.jsx, linha 542
+  * { transition: background-color .3s ease, color .3s ease, border-color .3s ease; }
+
+Problema:
+  Aplicar transition em TODOS os elementos (*) é uma prática muito custosa.
+  Isso força o browser a criar "composite layers" para cada elemento na tela
+  e pode causar lentidão perceptível em dispositivos menos potentes. Além disso,
+  interfere com animações explícitas de componentes individuais.
+
+Fix necessário:
+  Remover o seletor universal. Aplicar transitions apenas onde necessário,
+  nos componentes específicos.
+
+──────────────────────────────────────────────────────────────────────────────
+
+DESIGN #4 — AUSÊNCIA DE FEEDBACK DE LOADING/EMPTY STATES
+──────────────────────────────────────────────────────────
+Severidade: [MEDIUM] — UX fraca
+
+Problema:
+  - A seção de Projetos tem estado vazio genérico ("Nenhum projeto ativo")
+    sem ícone, sugestão ou CTA atrativo.
+  - A seção de Notas tem estado vazio um pouco melhor (botão "Criar Primeira Nota").
+  - O schedule não tem estado vazio — se todos os slots estiverem vazios,
+    mostra uma tabela vazia e confusa.
+  - Não há loading spinner em lugar nenhum. Se o localStorage demorar
+    (volume alto de dados), a tela pode piscar.
+
+──────────────────────────────────────────────────────────────────────────────
+
+DESIGN #5 — TIPOGRAFIA INCONSISTENTE
+──────────────────────────────────────
+Severidade: [LOW]
+
+Problema:
+  1. O index.css define uma fonte padrão (system-ui / Roboto etc.)
+     que conflita com a DM Sans definida inline no JSX.
+  2. Alguns elementos usam fontFamily: "inherit" (correto), outros
+     definem fontFamily explicitamente (redundante e inconsistente).
+  3. A DM Serif Display é usada em apenas 2 elementos (h1 e h2).
+     A hierarquia tipográfica poderia ser mais expressiva.
+
+──────────────────────────────────────────────────────────────────────────────
+
+DESIGN #6 — ESTILO 100% INLINE (SEM SISTEMA DE DESIGN CSS)
+────────────────────────────────────────────────────────────
+Severidade: [MEDIUM] — Manutenção muito difícil
+
+Problema:
+  Absolutamente todo o estilo do projeto é feito via style={{ }} inline.
+  Isso significa:
+  1. Impossível de sobrescrever via CSS externo
+  2. Impossível de auditar visualmente (não dá para ver a "paleta" do site)
+  3. Cada componente redefine valores que deveriam ser compartilhados
+  4. Sem capacidade de animar com CSS keyframes
+  5. Estilos não são reutilizáveis entre componentes
+  6. Aumenta o bundle size (estilos não são deduplados pelo browser)
+
+  Um sistema de design com CSS variables seria muito mais eficiente:
+    :root { --color-teal: #0F6E56; --surface: #fff; ... }
+
+──────────────────────────────────────────────────────────────────────────────
+
+DESIGN #7 — SELETOR DE ÍCONES MUITO LIMITADO (MODAIS)
+───────────────────────────────────────────────────────
+Severidade: [LOW]
+
+Localização: AddPillarModal (linha 181) e AddProjectModal (linha 294)
+
+Problema:
+  Os ícones disponíveis são apenas caracteres Unicode genéricos:
+  ["◈", "◉", "◆", "◇", "●", "○", "■", "□"]
+  Eles não comunicam o propósito do pilar/projeto, são visualmente
+  fracos e todos têm o mesmo peso visual. Uma biblioteca de ícones
+  (Lucide, Heroicons, ou pelo menos emojis) seria muito mais expressiva.
+
+================================================================================
+  SEÇÃO 5 — PROBLEMAS DE CÓDIGO (QUALIDADE E MANUTENÇÃO)
+================================================================================
+
+CODE #1 — COMPARAÇÃO DE OBJETO DE TEMA FRÁGIL
+───────────────────────────────────────────────
+Severidade: [MEDIUM]
+
+Localização: central-home.jsx, linhas 170, 193, 213, 248, 327, 481
+  T.text === "#1A1916" ? "#fff" : "#000"
+
+Problema:
+  Detectar o tema ativo comparando um valor hexadecimal específico
+  é extremamente frágil. Se você alterar um tom da cor de texto no
+  tema claro, TODOS esses condicionais quebram silenciosamente.
+  Um booleano `isDarkMode` (já disponível no contexto) deveria ser passado
+  aos componentes, ou os próprios componentes deveriam calcular a cor
+  do texto do botão baseada no contraste.
+
+Fix sugerido:
+  Adicionar um campo ao tema: { buttonText: "#fff" } para dark,
+  { buttonText: "#fff" } para light (ambos brancos sobre fundo escuro).
+  Ou simplesmente: passar isDarkMode como prop.
+
+──────────────────────────────────────────────────────────────────────────────
+
+CODE #2 — useState COM OBJETO MUTADO DIRETAMENTE
+──────────────────────────────────────────────────
+Severidade: [MEDIUM]
+
+Localização: central-home.jsx, linhas 418 e 421
+  edited.classes[editingCell.day][classIdx] = { ... }  // MUTAÇÃO DIRETA
+  edited.classes[editingCell.day].push(...)             // MUTAÇÃO DIRETA
+
+Problema:
+  Embora `edited` seja criado com JSON.parse(JSON.stringify(schedule))
+  (deep clone na linha 386), dentro de saveCell() o array é mutado
+  diretamente antes de forçar re-render via setEdited(JSON.parse(...)).
+  Essa é uma prática anti-pattern em React. Pode causar bugs sutis
+  quando o React tenta comparar estados entre renders.
+
+Fix:
+  Criar novo array sem mutar o existente:
+  const newClasses = [...edited.classes[editingCell.day]];
+  newClasses[classIdx] = { slot: editingCell.slot, ...formData };
+  setEdited({ ...edited, classes: { ...edited.classes, [editingCell.day]: newClasses }});
+
+──────────────────────────────────────────────────────────────────────────────
+
+CODE #3 — EVENTO DE RESIZE NÃO TRATADO (RESPONSIVIDADE)
+──────────────────────────────────────────────────────────
+Severidade: [LOW]
+
+Problema:
+  Não há nenhum listener de resize. Se o usuário redimensionar a janela
+  enquanto o app está aberto, o layout não atualiza dinamicamente.
+  (Agravado pelo fato de não haver CSS responsivo — ponto DESIGN #1)
+
+──────────────────────────────────────────────────────────────────────────────
+
+CODE #4 — DEPENDÊNCIAS DE useEffect AUSENTES/INCORRETAS
+─────────────────────────────────────────────────────────
+Severidade: [LOW]
+
+Localização: central-home.jsx, linha 392–402 (ScheduleEditor)
+  useEffect(() => { ... }, []);  // array vazio, mas usa `edited` e `initialDay`
+
+Problema:
+  O ESLint com react-hooks/exhaustive-deps apontaria `edited`, `initialDay`
+  e `initialSlot` como dependências faltantes. Embora funcione na prática
+  (pois só precisa rodar ao montar), pode causar confusão ao manter o código.
+
+──────────────────────────────────────────────────────────────────────────────
+
+CODE #5 — HANDLERS DE MOUSE INLINE SEM ABSTRAÇÃO
+──────────────────────────────────────────────────
+Severidade: [LOW]
+
+Problema:
+  Padrões como:
+    onMouseEnter={e => { e.currentTarget.style.border... }}
+    onMouseLeave={e => { e.currentTarget.style.border... }}
+  
+  Estão repetidos dezenas de vezes em todo o arquivo (15+ ocorrências).
+  Isso é JavaScript manipulando DOM diretamente — contradiz a filosofia
+  do React de state como fonte da verdade. O correto seria usar :hover no CSS
+  ou um estado `isHovered`.
+
+──────────────────────────────────────────────────────────────────────────────
+
+CODE #6 — QUICK_LINKS SEM FUNCIONALIDADE
+──────────────────────────────────────────
+Severidade: [MEDIUM]
+
+Localização: central-home.jsx, linhas 60–65 e 652–661
+
+Problema:
+  Os botões "Agenda", "Compras", "Hábitos", "Leitura" existem na interface
+  mas não fazem absolutamente nada ao serem clicados. Não há `onClick`,
+  não navegam para nenhum lugar, não abrem modais. São decorativos.
+  O usuário VAI clicar e ficar confuso.
+
+──────────────────────────────────────────────────────────────────────────────
+
+CODE #7 — VAULT ITEMS SEM FUNCIONALIDADE
+──────────────────────────────────────────
+Severidade: [MEDIUM]
+
+Localização: central-home.jsx, linhas 67 e 682–695
+
+Problema:
+  Similar ao CODE #6: "Manuais", "Senhas", "Artigos salvos", etc.
+  são botões decorativos sem nenhuma funcionalidade. O "Cofre de Recursos"
+  foi mencionado como funcionalidade-chave no plano (documentação.txt),
+  mas na implementação é apenas visual.
+
+──────────────────────────────────────────────────────────────────────────────
+
+CODE #8 — SCHEDULE COM BUG DE DIA NA SEMANA
+──────────────────────────────────────────────
+Severidade: [MEDIUM]
+
+Localização: central-home.jsx, linha 336
+  const DAYS = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+
+Localização: central-home.jsx, linhas 83–111 (INITIAL_SCHEDULE)
+  monday, tuesday, wednesday, thursday, friday, saturday
+
+Problema:
+  Os arrays de dias usam nomes em PORTUGUÊS ("segunda", "terça"...),
+  mas os dados em INITIAL_SCHEDULE usam nomes em INGLÊS ("monday", "tuesday"...).
+  Isso funciona atualmente porque o ScheduleEditor usa o mesmo array DAYS
+  em português para acessar as chaves — mas é uma inconsistência que
+  confunde qualquer pessoa que for manter o código.
+
+================================================================================
+  SEÇÃO 6 — FUNCIONALIDADES AUSENTES / PROMETIDAS MAS NÃO IMPLEMENTADAS
+================================================================================
+
+Com base na documentação.txt e nas expectativas naturais do projeto:
+
+  ✗ Quick Links sem ação (Agenda, Compras, Hábitos, Leitura)
+  ✗ Cofre de Recursos sem funcionalidade (era pilar central do projeto)
+  ✗ Pilares sem links reais (campo `links` ausente causa crash)
+  ✗ Arquivamento de projetos (mencionado na documentação como feature)
+  ✗ Sem busca ou filtro (especialmente nas Notas e Projetos)
+  ✗ Sem tags/categorias nas notas
+  ✗ Sem dados de datas de entrega nos projetos
+  ✗ Sem exportação de dados (backup do localStorage)
+  ✗ Sem importação de dados (restaurar backup)
+  ✗ Sem atalho de teclado global para "Anotar Agora" (ex: Ctrl+N)
+  ✗ Sem indicação do dia atual no Schedule (destaque da coluna do dia)
+  ✗ Sem contador de progresso das aulas do dia atual
+  ✗ Sem histórico de notas deletadas (lixeira)
+  ✗ Sem modo de impressão / exportar para PDF
+  ✗ Sem favicon customizado (usa o padrão do Vite — vite.svg)
+
+================================================================================
+  SEÇÃO 7 — PROBLEMAS DE SEO E HTML
+================================================================================
+
+SEO/HTML #1 — META TAGS INSUFICIENTES
+  index.html não tem:
+    - <meta name="description">
+    - <meta property="og:title"> / og:description (Open Graph)
+    - <meta name="theme-color">
+    - favicon personalizado (usa vite.svg padrão)
+    - manifest.json (para PWA / ícone na tela inicial do celular)
+
+SEO/HTML #2 — LANG CORRETO (PONTO POSITIVO ✓)
+  <html lang="pt-BR"> está correto.
+
+SEO/HTML #3 — ACESSIBILIDADE (Falta)
+  - Botões sem `aria-label` (ex: botão ☀️/🌙 sem descrição)
+  - Modais sem `role="dialog"` nem `aria-modal="true"`
+  - Sem gerenciamento de foco ao abrir modais
+  - Inputs sem `<label>` associado
+  - Progress bars sem `role="progressbar"` nem `aria-valuenow`
+  - Sem `aria-live` para notificações de ações
+
+================================================================================
+  SEÇÃO 8 — OPORTUNIDADES DE MELHORIA / O QUE PODE SER ADICIONADO
+================================================================================
+
+MELHORIAS DE FUNCIONALIDADE:
+─────────────────────────────
+  1. [ALTA PRIORIDADE] Atalho global Ctrl+N para abrir nota rápida
+  2. [ALTA PRIORIDADE] Destaque da coluna do dia atual no Schedule
+  3. [ALTA PRIORIDADE] Funcionalidade real nos Quick Links (abrir Google
+     Calendar, lista de compras customizável, rastreador de hábitos)
+  4. [ALTA PRIORIDADE] Cofre de Recursos com sistema de links customizáveis
+     (adicionar URL + título + categoria)
+  5. Busca global (filtrar notas e projetos por texto)
+  6. Tags/categorias nas notas
+  7. Data de entrega/deadline nos projetos com alertas visuais
+  8. Arquivamento de projetos concluídos (mover para "arquivo")
+  9. Exportar dados como JSON (backup)
+  10. Importar dados JSON (restore)
+  11. Contador de hábitos diários integrado
+  12. Widget de "próxima aula" na home (baseado no horário atual)
+  13. Modo "foco" — esconder tudo menos uma nota ou projeto específico
+  14. Notificações do browser (Web Notifications API) para lembretes
+  15. Ordenação e filtros nos projetos (por progresso, por data)
+
+MELHORIAS DE DESIGN:
+──────────────────────
+  1. [ALTA PRIORIDADE] Layout responsivo (mobile-first)
+  2. [ALTA PRIORIDADE] Mover fontes para index.html (eliminar FOUC)
+  3. Migrar estilos para CSS variables + classes (eliminar style inline)
+  4. Animações de entrada dos cards (fade + slide sutil)
+  5. Microanimação no progress bar ao mudar valor
+  6. Ícones reais (Lucide React ou Phosphor Icons) em vez de Unicode
+  7. Avatar/foto do usuário no header
+  8. Widget de relógio analógico ou digital na home
+  9. Gradiente sutil ou pattern no fundo (não monocromático)
+  10. Toast notifications para confirmações de ações
+      (ex: "Nota salva!", "Projeto removido")
+  11. Skeleton loading para dados do localStorage
+  12. Ondas ou decoração visual na seção de boas-vindas
+  13. Card de "Próxima aula" com countdown em tempo real
+  14. Barra de progresso geral de todos os projetos no header
+
+MELHORIAS TÉCNICAS:
+────────────────────
+  1. [CRÍTICO] Separar o monolito em múltiplos arquivos/componentes
+  2. [CRÍTICO] Corrigir pillar.links (crash ao abrir pilares)
+  3. [CRÍTICO] Corrigir cores hardcoded no dark mode
+  4. Adicionar ESLint + configuração react-hooks
+  5. Adicionar Prettier para formatação consistente
+  6. Usar TypeScript (ou pelo menos JSDoc) para tipagem
+  7. Implementar Context API ou Zustand para estado global
+  8. Adicionar testes unitários (Vitest + Testing Library)
+  9. PWA: adicionar manifest.json + service worker para uso offline
+  10. Implementar persistência alternativa (IndexedDB para dados maiores)
+
+================================================================================
+  SEÇÃO 9 — PONTUAÇÃO DE READINESS POR CATEGORIA
+================================================================================
+
+  Funcionalidade Core:        ★★★☆☆  (3/5) — bugs críticos, funcionalidades incompletas
+  Design & UX:                ★★★☆☆  (3/5) — boa base, sem responsividade
+  Código & Arquitetura:       ★★☆☆☆  (2/5) — monolito, anti-patterns React
+  Acessibilidade:             ★☆☆☆☆  (1/5) — praticamente ausente
+  Performance:                ★★★☆☆  (3/5) — transições globais, FOUC nas fontes
+  Manutenibilidade:           ★★☆☆☆  (2/5) — 817 linhas em 1 arquivo
+  Completude (vs. documentação): ★★☆☆☆ (2/5) — muitas features prometidas não implementadas
+
+  PONTUAÇÃO GERAL: 62 / 100
+
+================================================================================
+  SEÇÃO 10 — PRIORIDADES DE REFATORAÇÃO
+================================================================================
+
+  [P1 - CRÍTICO] Corrigir crash dos Pilares
+    → Adicionar `links: []` em INITIAL_PILLARS ou fallback em PillarDetail
+    → Esforço: S (< 1 hora)
+
+  [P2 - CRÍTICO] Corrigir cores hardcoded no Dark Mode
+    → Substituir referências a LIGHT_THEME nos dados por chaves semânticas
+    → Esforço: M (2–3 horas)
+
+  [P3 - ALTO] Mover fontes Google para index.html
+    → Eliminar FOUC e melhorar performance de carregamento
+    → Esforço: S (30 minutos)
+
+  [P4 - ALTO] Adicionar responsividade mobile
+    → Media queries no CSS ou lógica condicional no layout
+    → Esforço: M (1–2 dias)
+
+  [P5 - ALTO] Implementar funcionalidade nos Quick Links e Vault
+    → Pelo menos torná-los configuráveis (adicionar URL + abrir link)
+    → Esforço: M (1 dia)
+
+  [P6 - MÉDIO] Separar arquivo em módulos (refatoração arquitetural)
+    → Criar estrutura de pastas src/components, src/data, src/hooks
+    → Esforço: L (3–5 dias, sem mudar funcionalidade)
+
+  [P7 - MÉDIO] Migrar para CSS variables e eliminar estilos inline
+    → Melhorar manutenibilidade e permitir animações CSS
+    → Esforço: L (3–5 dias)
+
+  [P8 - MÉDIO] Adicionar acessibilidade básica (aria labels, focus)
+    → aria-label nos botões, role="dialog" nos modais
+    → Esforço: M (1 dia)
+
+QUICK WINS (fazer em < 1h cada):
+──────────────────────────────────
+  → Mover Google Fonts para index.html
+  → Adicionar `links: []` nos INITIAL_PILLARS (eliminar crash)
+  → Adicionar favicon personalizado
+  → Adicionar <meta name="description"> no index.html
+  → Adicionar aria-label no botão de dark mode
+  → Adicionar highlight na coluna do dia atual no Schedule
+  → Remover CSS global de index.css (conflito com inline styles)
+
+================================================================================
+  SEÇÃO 11 — ANÁLISE DE DESIGN (SKILL: frontend-design)
+================================================================================
+
+Direção Estética Atual: "Luxury Minimal" / "Editorial"
+  → Referências: Notion, Linear, Craft Docs
+
+Pontos Fortes:
+  ✓ Paleta de cores bem definida e coesa (teal, amber, blue, purple, coral)
+  ✓ Tipografia expressiva (DM Serif Display + DM Sans é uma combinação forte)
+  ✓ Dark mode bem implementado visualmente
+  ✓ Cards com bordas sutis e hover states bem pensados
+  ✓ Tag system com cores semânticas por categoria
+  ✓ Hierarquia clara entre seções
+
+Pontos Fracos:
+  ✗ Não tem "design anchor" memorável — não há elemento que faça o usuário
+    se lembrar do design 24h depois
+  ✗ Layout em grid 50/50 é previsível e genérico
+  ✗ Ícones Unicode são visualmente fracos
+  ✗ Background puro (#F9F8F5) sem textura ou profundidade
+  ✗ Header muito simples — poderia ter mais personalidade
+  ✗ Sem animações de entrada (os cards simplesmente aparecem)
+  ✗ Ausência de elementos decorativos intencionais
+
+DFII (Design Feasibility & Impact Index):
+  Aesthetic Impact:           4/5
+  Context Fit:                5/5
+  Implementation Feasibility: 5/5
+  Performance Safety:         3/5 (estilos globais)
+  Consistency Risk:           2 (risco ALTO — tudo inline)
+
+  DFII = (4 + 5 + 5 + 3) - 2 = 15  → Excelente potencial, execução técnica frágil
+
+================================================================================
+  FIM DO RELATÓRIO
+================================================================================
+
+Próximos passos recomendados (em ordem):
+  1. Corrigir crash do Pilar (BUG #1) — 30min
+  2. Corrigir Dark Mode das cores (BUG #2) — 2h
+  3. Mover Google Fonts para index.html — 15min
+  4. Implementar responsividade mobile básica — 1 dia
+  5. Dar funcionalidade aos Quick Links e Vault — 1 dia
+  6. Refatorar para múltiplos arquivos — ao longo do tempo
+
+Gerado automaticamente com as skills:
+  - vibe-code-auditor v2.0.0
+  - frontend-design (community)
+  - react-patterns
+  - código analisado: 817 linhas, 1 arquivo principal
+
+================================================================================

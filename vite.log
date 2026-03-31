@@ -1,0 +1,12 @@
+
+> central-home@0.0.1 dev
+> vite
+
+Port 3000 is in use, trying another one...
+Port 3001 is in use, trying another one...
+
+  VITE v4.5.14  ready in 238 ms
+
+  ➜  Local:   http://localhost:3002/
+  ➜  Network: http://192.168.3.43:3002/
+  ➜  press h to show help

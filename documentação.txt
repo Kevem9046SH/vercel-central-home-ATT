@@ -1,0 +1,50 @@
+📑 Plano de Projeto: Central Digital "Home"
+1. Objetivo Principal
+Centralizar o acesso e a visualização de informações dispersas em diferentes ecossistemas (Google, Notion, WhatsApp, Apps de Finanças, etc.), servindo como uma camada de interface única (Single Point of Truth).
+2. Princípios de Design
+Fricção Zero: O acesso às informações mais usadas deve estar a no máximo 2 cliques.
+Minimalismo Visual: Interface limpa para evitar a sobrecarga cognitiva (menos é mais).
+Agnóstico de Plataforma: Deve funcionar bem tanto no desktop quanto no mobile.
+
+3. Arquitetura da Informação (O Mapa)
+Sugiro organizar sua tela inicial em 4 Blocos Lógicos:
+A. Barra de Acesso Rápido (Inbox)
+Botão "Anotar Agora": Link para uma nota rápida ou captura de voz.
+Links Diários: Agenda do dia, Lista de Compras, Rastreador de Hábitos.
+B. Pilares da Vida (Áreas Estáticas)
+Finanças: Link para planilha de gastos ou app bancário.
+Saúde: Histórico de exames, treinos e receitas médicas.
+Carreira/Estudos: Portfólio, certificados e cursos em andamento.
+Casa: Inventário, contratos de aluguel/manutenção, lista de desejos.
+C. Projetos Ativos (Áreas Dinâmicas)
+Espaço para o que está acontecendo agora (ex: "Planejamento Viagem de Férias" ou "Reforma da Sala"). Assim que o projeto acaba, ele sai da tela inicial e vai para o "Arquivo".
+D. Cofre de Recursos (Repositório)
+Manuais de instruções, senhas (links para gerenciador), referências visuais e artigos salvos para ler depois.
+
+4. Escolha da "Pilastra" (Tech Stack)
+Ferramenta
+Estilo
+Melhor para...
+Notion
+Modular
+Quem gosta de bases de dados e customização total.
+Obsidian
+Local/Privado
+Quem prioriza segurança e conexões entre notas.
+Framer/Carrd
+Site Visual
+Quem quer uma interface de "botões" bonita e rápida.
+Raindrop.io
+Bookmark Manager
+Se o seu problema for apenas centralizar links de diversos sites.
+
+Exportar para as Planilhas
+
+5. Próximos Passos (Checklist)
+[ ] Inventário: Liste os 5 locais onde você mais "perde" informações hoje.
+[ ] Escolha da Ferramenta: Decida entre o visual (Site) ou o funcional (Notion/Obsidian).
+[ ] Criação do Protótipo: Monte apenas a estrutura dos 4 blocos acima, sem preencher tudo.
+[ ] Ritual de Limpeza: Uma vez por semana, mova o que está no "Inbox" para os seus devidos lugares.
+
+Dica de Ouro: Não tente organizar o passado agora. Foque em criar o lugar onde as coisas que chegarem a partir de hoje serão guardadas. O passado você organiza aos poucos, conforme a necessidade surgir.
+
