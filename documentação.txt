@@ -47,4 +47,4 @@ Exportar para as Planilhas
 [ ] Ritual de Limpeza: Uma vez por semana, mova o que está no "Inbox" para os seus devidos lugares.
 
 Dica de Ouro: Não tente organizar o passado agora. Foque em criar o lugar onde as coisas que chegarem a partir de hoje serão guardadas. O passado você organiza aos poucos, conforme a necessidade surgir.
-
+git push -u origin main
