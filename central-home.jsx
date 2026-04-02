@@ -2,8 +2,16 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { DndContext, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, DragOverlay, defaultDropAnimationSideEffects } from "@dnd-kit/core";
 import { restrictToWindowEdges } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
-import { Hexagon, Circle, Square, Triangle, Folder, BookOpen, Heart, Briefcase, Home as HomeIcon, Pencil, Trash2, Plus, X, Moon, Sun, Bell, Settings, RefreshCw, ExternalLink, AlertCircle, LogOut, User, Calendar, Zap, Box, ChevronUp, ChevronDown, Wallet, DollarSign, Target, ShoppingBag, PieChart, Bot, Download, Upload, Search, Archive } from "lucide-react";
+import { Hexagon, Circle, Square, Triangle, Folder, BookOpen, Heart, Briefcase, Home as HomeIcon, Pencil, Trash2, Plus, X, Moon, Sun, Bell, Settings, RefreshCw, ExternalLink, AlertCircle, LogOut, User, Calendar, Zap, Box, ChevronUp, ChevronDown, Wallet, DollarSign, Target, ShoppingBag, PieChart, Bot, Download, Upload, Search, Archive, GraduationCap, Layers, Star } from "lucide-react";
 import { GoogleOAuthProvider, useGoogleLogin, googleLogout } from "@react-oauth/google";
+
+// Features
+import { NotesSection } from "./src/features/notes/NotesSection.jsx";
+import { StudySection } from "./src/features/study/StudySection.jsx";
+
+// Firebase App Data
+import { auth, isConfigured } from "./src/config/firebase.js";
+import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 
 
 const IconMap = {
@@ -285,39 +293,6 @@ function EditPillarModal({ pillar, onClose, onSave, onDelete, T }) {
 }
 
 /* ─── Note Modal ──────────────────────────────────────────────────────────── */
-function NoteModal({ onClose, onSave, T, editingNote = null }) {
-  const [text, setText] = useState(editingNote?.text || "");
-  const ta = useRef(null);
-  useEffect(() => { ta.current?.focus(); }, []);
-
-  function handleKey(e) {
-    if (e.key === "Escape") onClose();
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { if (text.trim()) onSave(text.trim()); }
-  }
-
-  return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16, transition: "background-color .3s ease" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: T.surface, borderRadius: 14, border: `1px solid ${T.border}`, padding: "1.5rem", width: "100%", maxWidth: 480, boxShadow: "0 8px 40px rgba(0,0,0,.12)", transition: "all .3s ease" }}>
-        <p style={{ fontSize: 11, color: T.faint, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: ".75rem" }}>{editingNote ? "Editar nota" : "Nova nota"}</p>
-        <textarea
-          ref={ta}
-          value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={handleKey}
-          placeholder="Escreva aqui…"
-          style={{ width: "100%", minHeight: 120, border: "none", outline: "none", resize: "none", fontSize: 15, fontFamily: "inherit", color: T.text, background: T.bg, lineHeight: 1.6, caretColor: T.text, padding: "8px 0", transition: "all .3s ease" }}
-        />
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1rem", paddingTop: ".75rem", borderTop: `1px solid ${T.border}`, transition: "border-color .3s ease" }}>
-          <span style={{ fontSize: 11, color: T.faint }}>⌘ + Enter para salvar · Esc para fechar</span>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={onClose} style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${T.border}`, background: "none", fontSize: 13, color: T.muted, cursor: "pointer", transition: "all .3s ease" }}>Cancelar</button>
-            <button onClick={() => { if (text.trim()) onSave(text.trim()); }} disabled={!text.trim()} style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: text.trim() ? T.text : T.border, color: text.trim() ? (T.text === "#1A1916" ? "#fff" : "#000") : T.faint, fontSize: 13, fontWeight: 500, cursor: text.trim() ? "pointer" : "default", transition: "all .3s ease" }}>Salvar</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ─── Pillar Detail ───────────────────────────────────────────────────────── */
 function PillarDetail({ pillar, onClose, onUpdateLinks, T }) {
@@ -416,15 +391,21 @@ function DraggableClass({ cls, day, slot, T }) {
     data: { cls, day, slot }
   });
 
+  // Calculate high-contrast text color based on the teal background
+  // LIGHT_THEME.teal is dark -> white text
+  // DARK_THEME.teal is light -> dark text
+  const isDarkTeal = T.teal === "#0F6E56"; 
+  const textColor = isDarkTeal ? "#FFFFFF" : "#1A1916";
+
   const style = {
     transform: CSS.Translate.toString(transform),
     opacity: isDragging ? 0.4 : 1,
     cursor: "grab",
     textAlign: "center",
     zIndex: isDragging ? 20 : 1,
-    padding: "10px",
+    padding: "8px",
     background: T.teal,
-    color: "#fff",
+    color: textColor,
     width: "100%",
     height: "100%",
     minHeight: "80px",
@@ -432,15 +413,16 @@ function DraggableClass({ cls, day, slot, T }) {
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
-    transition: "transform 0.1s ease",
-    userSelect: "none"
+    transition: "transform 0.1s ease, color 0.15s ease, background 0.15s ease",
+    userSelect: "none",
+    borderRadius: "6px"
   };
 
   return (
     <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
-      <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>{cls.subject}</div>
-      <div style={{ fontSize: 11, opacity: 0.9 }}>{cls.room}</div>
-      <div style={{ fontSize: 11, opacity: 0.8 }}>{cls.professor}</div>
+      <div style={{ fontWeight: 700, marginBottom: 2, fontSize: 12, lineHeight: 1.1 }}>{cls.subject}</div>
+      <div style={{ fontSize: 10, opacity: 0.9 }}>{cls.room}</div>
+      <div style={{ fontSize: 10, opacity: 0.8, marginTop: 2, fontStyle: 'italic' }}>{cls.professor}</div>
     </div>
   );
 }
@@ -451,33 +433,43 @@ function DroppableSlot({ day, slot, children, isToday, T, onEdit, cls }) {
     data: { day, slot }
   });
 
-  const style = {
-    padding: 0,
+  const tdStyle = {
+    padding: 2,
     border: `1px solid ${T.border}`,
-    background: isOver ? T.tealBg : (cls ? T.tealBg : T.surface),
-    cursor: "pointer",
-    color: cls ? T.teal : T.faint,
-    fontSize: 13,
-    lineHeight: 1.5,
-    transition: "all .15s ease-out",
     height: 80,
     borderLeft: isToday ? `3px solid ${T.teal}` : `1px solid ${T.border}`,
     borderRight: isToday ? `3px solid ${T.teal}10` : `1px solid ${T.border}`,
-    boxShadow: isOver ? `inset 0 0 0 2px ${T.teal}40` : "none",
+    background: T.surface,
     position: "relative",
     textAlign: "center",
     verticalAlign: "middle",
+    transition: "background 0.2s"
+  };
+
+  const innerStyle = {
+    width: "100%",
+    height: "100%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: isOver ? T.tealBg : (cls ? "transparent" : "transparent"),
+    borderRadius: 8,
+    cursor: "pointer",
+    transition: "all .15s ease-out",
+    boxShadow: isOver ? `inset 0 0 0 2px ${T.teal}40` : "none",
     zIndex: isOver ? 5 : 1
   };
 
   return (
-    <td ref={setNodeRef} onClick={() => onEdit(day, slot)} style={style}>
-      {children}
-      {!cls && !isOver && (
-        <div className="empty-plus" style={{ opacity: 0, transition: "opacity .2s", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%", pointerEvents: "none", position: "absolute", top: 0, left: 0 }}>
-          <Plus size={18} />
-        </div>
-      )}
+    <td style={tdStyle} onClick={() => onEdit(day, slot)}>
+      <div ref={setNodeRef} style={innerStyle}>
+        {children}
+        {!cls && !isOver && (
+          <div className="empty-plus" style={{ opacity: 0, transition: "opacity .2s", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%", pointerEvents: "none" }}>
+            <Plus size={18} color={T.faint} />
+          </div>
+        )}
+      </div>
     </td>
   );
 }
@@ -1325,23 +1317,64 @@ function GoogleAuthArea({ T, userProfile, setUserProfile, apiConfig, setShowApiS
     );
   }
 
-  if (!apiConfig.googleClientId) {
+  const handleFirebaseLogin = async () => {
+    if (!auth) return;
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      provider.addScope("https://www.googleapis.com/auth/classroom.coursework.me.readonly");
+      provider.addScope("https://www.googleapis.com/auth/classroom.courses.readonly");
+      
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      
+      setUserProfile({
+        sub: result.user.uid,
+        name: result.user.displayName,
+        given_name: result.user.displayName?.split(' ')[0] || "Usuário",
+        picture: result.user.photoURL,
+        email: result.user.email
+      });
+      
+      if (credential?.accessToken) {
+        setGoogleToken(credential.accessToken);
+      } else {
+        setGoogleToken(null);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  if (isConfigured) {
     return (
-      <button onClick={() => setShowApiSettings(true)}
+      <button onClick={handleFirebaseLogin}
         style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 10, border: `1px solid ${T.border}`, background: T.surface, fontSize: 13, fontWeight: 600, color: T.text, cursor: "pointer", transition: "all .2s" }}
-        onMouseEnter={e => { e.currentTarget.style.borderColor = T.accent; e.currentTarget.style.color = T.accent; }}
-        onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.text; }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = T.borderMid; e.currentTarget.style.background = T.bg; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = T.surface; }}
       >
-        <Settings size={16} /> Setup Login
+        <User size={16} /> Entrar com Google
       </button>
     );
   }
 
+  if (apiConfig.googleClientId) {
+    return (
+      <CustomGoogleLoginButton T={T} onLoginSuccess={(data) => { 
+        setUserProfile(data); 
+        setGoogleToken(data.access_token); 
+      }} />
+    );
+  }
+
   return (
-    <CustomGoogleLoginButton T={T} onLoginSuccess={(data) => { 
-      setUserProfile(data); 
-      setGoogleToken(data.access_token); 
-    }} />
+    <button onClick={() => setShowApiSettings(true)}
+      style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 10, border: `1px solid ${T.border}`, background: T.surface, fontSize: 13, fontWeight: 600, color: T.text, cursor: "pointer", transition: "all .2s" }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = T.accent; e.currentTarget.style.color = T.accent; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.text; }}
+    >
+      <Settings size={16} /> Setup Login
+    </button>
   );
 }
 
@@ -1494,13 +1527,19 @@ function AddToolboxModal({ onClose, onAdd, toolboxToEdit, T }) {
   );
 }
 
-function FinancesSection({ T, finances, setFinances, wishlist, setWishlist, showToast }) {
+function FinancesSection({ T, finances, setFinances, wishlist, setWishlist, showToast, isDarkMode }) {
   const [tab, setTab] = useState("overview"); 
   const [editingBalance, setEditingBalance] = useState(false);
   const [tempBalance, setTempBalance] = useState(finances.balance || 0);
   const [editingIncome, setEditingIncome] = useState(false);
   const [tempIncome, setTempIncome] = useState(finances.income || 0);
   const [showAddWish, setShowAddWish] = useState(false);
+  const [wishToEdit, setWishToEdit] = useState(null);
+  
+  // Persistent categories state (initialized from current wishlist if any)
+  const [wishlistCategories, setWishlistCategories] = useLocalStorage("wishlist_categories", ["Geral", "Quarto", "Tecnologia", "Lazer"]);
+  const [showCatManager, setShowCatManager] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
   
   const balance = finances.balance || 0;
   const income = finances.income || 0;
@@ -1632,26 +1671,70 @@ function FinancesSection({ T, finances, setFinances, wishlist, setWishlist, show
               <p style={{ fontSize: 15, color: T.faint }}>Nenhum desejo na sua lista ainda.</p>
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1.25rem" }}>
-              {wishlist.map((w, i) => {
-                const itemPercent = finances.balance > 0 ? ((w.price / finances.balance) * 100).toFixed(1) : 0;
+            <div style={{ display: "flex", flexDirection: "column", gap: "2.5rem" }}>
+              <div style={{ display: 'flex', gap: 10, marginBottom: -10 }}>
+                <button onClick={() => setShowCatManager(!showCatManager)} style={{ fontSize: 12, background: T.surface, border: `1px solid ${T.border}`, padding: "6px 12px", borderRadius: 8, color: T.muted, cursor: "pointer", fontWeight: 600 }}>{showCatManager ? "Fechar Gestão" : "Gerenciar Categorias"}</button>
+              </div>
+
+              {showCatManager && (
+                <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                   <div style={{ display: 'flex', gap: 8 }}>
+                      <input value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="Nova Categoria..." style={{ flex: 1, background: T.bg, border: `1px solid ${T.border}`, padding: "8px 12px", borderRadius: 8, color: T.text, fontSize: 13, outline: 'none' }} />
+                      <button onClick={() => { if(newCatName.trim()) { setWishlistCategories([...new Set([...wishlistCategories, newCatName.trim()])]); setNewCatName(""); } }} style={{ background: T.text, color: T.bg, border: 'none', padding: "8px 16px", borderRadius: 8, fontWeight: 600, cursor: 'pointer' }}>Adicionar</button>
+                   </div>
+                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {wishlistCategories.map(cat => (
+                        <div key={cat} style={{ background: T.bg, border: `1px solid ${T.border}`, padding: "4px 10px", borderRadius: 6, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: T.text }}>
+                          {cat}
+                          {cat !== "Geral" && <button onClick={() => setWishlistCategories(wishlistCategories.filter(c => c !== cat))} style={{ background: 'none', border: 'none', color: T.coral, cursor: 'pointer', padding: 0, display: 'flex' }}><X size={12}/></button>}
+                        </div>
+                      ))}
+                   </div>
+                </div>
+              )}
+
+              {wishlistCategories.sort((a,b) => a === "Geral" ? -1 : b === "Geral" ? 1 : 0).map(category => {
+                const items = wishlist.filter(w => (w.category || "Geral") === category);
+                if (items.length === 0 && !showCatManager) return null; // Hide empty categories unless managing
+                
                 return (
-                  <div key={w.id || i} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 16, padding: "1.25rem", position: "relative" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                      <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: T.text, lineHeight: 1.3 }}>{w.name}</h4>
-                      <button onClick={() => { setWishlist(wishlist.filter(x => x.id !== w.id)); showToast("Removido"); }} style={{ border: "none", background: "none", color: T.faint, cursor: "pointer", padding: 4 }}><Trash2 size={14}/></button>
+                  <div key={category}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: "1rem" }}>
+                      <div style={{ height: 1, flex: 1, background: `linear-gradient(90deg, ${T.borderMid} 0%, transparent 100%)` }} />
+                      <span style={{ fontSize: 12, fontWeight: 800, color: T.muted, textTransform: "uppercase", letterSpacing: ".1em" }}>{category} {items.length === 0 && "(Vazia)"}</span>
+                      <div style={{ height: 1, flex: 4, background: `linear-gradient(90deg, transparent 0%, ${T.borderMid} 100%)` }} />
                     </div>
-                    {w.url && <a href={w.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: T.blue, textDecoration: "none", display: "flex", alignItems: "center", gap: 4, marginBottom: 12 }}><ExternalLink size={12}/> Abrir Link</a>}
-                    
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 'auto' }}>
-                      <span style={{ fontSize: 20, fontWeight: 700, color: T.text }}>{BRL(w.price)}</span>
+                    {items.length === 0 ? (
+                      <p style={{ textAlign: 'center', fontSize: 12, color: T.faint, margin: '20px 0' }}>Arraste ou crie itens para esta categoria.</p>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1.25rem" }}>
+                        {items.map((w, i) => {
+                          const itemPercent = balance > 0 ? ((w.price / balance) * 100).toFixed(1) : 0;
+                          return (
+                            <div key={w.id || i} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 16, padding: "1.25rem", position: "relative", display: 'flex', flexDirection: 'column', transition: 'all .2s' }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                                <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: T.text, lineHeight: 1.3 }}>{w.name}</h4>
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                  <button onClick={() => { setWishToEdit(w); setShowAddWish(true); }} style={{ border: "none", background: "none", color: T.faint, cursor: "pointer", padding: 4 }}><Pencil size={14}/></button>
+                                  <button onClick={() => { setWishlist(wishlist.filter(x => x.id !== w.id)); showToast("Removido"); }} style={{ border: "none", background: "none", color: T.faint, cursor: "pointer", padding: 4 }}><Trash2 size={14}/></button>
+                                </div>
+                              </div>
+                          {w.url && <a href={w.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: T.blue, textDecoration: "none", display: "flex", alignItems: "center", gap: 4, marginBottom: 12 }}><ExternalLink size={12}/> Abrir Link</a>}
+                          
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 'auto' }}>
+                            <span style={{ fontSize: 20, fontWeight: 700, color: T.text }}>{BRL(w.price)}</span>
+                          </div>
+                            <div style={{ marginTop: 12, padding: "8px 10px", background: T.amberBg, borderRadius: 8, color: T.amber, fontSize: 11, fontWeight: 700, border: `1px solid ${T.amber}20` }}>
+                              {itemPercent}% do seu saldo livre
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div style={{ marginTop: 8, padding: "6px 10px", background: T.amberBg, borderRadius: 6, color: T.amber, fontSize: 11, fontWeight: 600 }}>
-                      Tomará {itemPercent}% do saldo atual
-                    </div>
-                  </div>
-                );
-              })}
+                  )}
+                </div>
+              );
+            })}
             </div>
           )}
         </div>
@@ -1660,38 +1743,70 @@ function FinancesSection({ T, finances, setFinances, wishlist, setWishlist, show
       {showAddWish && (
         <EditWishModal 
           T={T} 
-          onClose={() => setShowAddWish(false)} 
-          onSave={(newItem) => { setWishlist([...wishlist, { ...newItem, id: "w_" + Date.now() }]); setShowAddWish(false); showToast("✓ Desejo adicionado"); }} 
+          wishToEdit={wishToEdit}
+          existingCategories={wishlistCategories}
+          onClose={() => { setShowAddWish(false); setWishToEdit(null); }} 
+          onSave={(newItem) => { 
+            if (wishToEdit) {
+              setWishlist(wishlist.map(x => x.id === wishToEdit.id ? { ...newItem, id: wishToEdit.id } : x));
+              showToast("✓ Desejo atualizado");
+            } else {
+              setWishlist([...wishlist, { ...newItem, id: "w_" + Date.now() }]); 
+              showToast("✓ Desejo adicionado");
+            }
+            setShowAddWish(false); 
+            setWishToEdit(null);
+            // Auto add to categories if new
+            if (!wishlistCategories.includes(newItem.category)) {
+              setWishlistCategories([...wishlistCategories, newItem.category]);
+            }
+          }} 
         />
       )}
     </div>
   );
 }
 
-function EditWishModal({ T, onClose, onSave }) {
-  const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
-  const [price, setPrice] = useState("");
+function EditWishModal({ T, onClose, onSave, existingCategories = [], wishToEdit = null }) {
+  const [name, setName] = useState(wishToEdit?.name || "");
+  const [url, setUrl] = useState(wishToEdit?.url || "");
+  const [price, setPrice] = useState(wishToEdit?.price || "");
+  const [category, setCategory] = useState(wishToEdit?.category || "");
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 120, padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: T.surface, borderRadius: 16, border: `1px solid ${T.border}`, width: "100%", maxWidth: 400, padding: "1.5rem" }}>
-        <h3 style={{ margin: "0 0 1.5rem 0", fontSize: 18, color: T.text, fontWeight: 700 }}>Novo Desejo</h3>
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 11, fontWeight: 700, color: T.muted, display: "block", marginBottom: 6 }}>O que você quer comprar?</label>
-          <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Novo Monitor" style={{ width: "100%", background: T.bg, border: `1px solid ${T.border}`, padding: "12px", borderRadius: 10, color: T.text, fontSize: 14, boxSizing: "border-box" }} />
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 120, padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: T.surface, borderRadius: 24, border: `1px solid ${T.border}`, width: "100%", maxWidth: 400, padding: "2rem", boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+        <h3 style={{ margin: "0 0 1.5rem 0", fontSize: 20, color: T.text, fontWeight: 700, fontFamily: "'DM Serif Display', serif" }}>{wishToEdit ? "Editar Desejo" : "Novo Desejo"}</h3>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 700, color: T.muted, display: "block", marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>O que você quer comprar?</label>
+            <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Monitor 4K" style={{ width: "100%", background: T.bg, border: `1px solid ${T.border}`, padding: "12px 16px", borderRadius: 12, color: T.text, fontSize: 14, boxSizing: "border-box", outline: 'none' }} />
+          </div>
+
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 700, color: T.muted, display: "block", marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>Categoria</label>
+            <input value={category} onChange={e => setCategory(e.target.value)} placeholder="Ex: Quarto, Escritório..." list="categories-list" style={{ width: "100%", background: T.bg, border: `1px solid ${T.border}`, padding: "12px 16px", borderRadius: 12, color: T.text, fontSize: 14, boxSizing: "border-box", outline: 'none' }} />
+            <datalist id="categories-list">
+              {existingCategories.map(c => <option key={c} value={c} />)}
+            </datalist>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 700, color: T.muted, display: "block", marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>Preço (R$)</label>
+              <input type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" style={{ width: "100%", background: T.bg, border: `1px solid ${T.border}`, padding: "12px 16px", borderRadius: 12, color: T.text, fontSize: 14, boxSizing: "border-box", outline: 'none' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 700, color: T.muted, display: "block", marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>Link (opcional)</label>
+              <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://..." style={{ width: "100%", background: T.bg, border: `1px solid ${T.border}`, padding: "12px 16px", borderRadius: 12, color: T.text, fontSize: 14, boxSizing: "border-box", outline: 'none' }} />
+            </div>
+          </div>
         </div>
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 11, fontWeight: 700, color: T.muted, display: "block", marginBottom: 6 }}>Preço Esperado (R$)</label>
-          <input type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" style={{ width: "100%", background: T.bg, border: `1px solid ${T.border}`, padding: "12px", borderRadius: 10, color: T.text, fontSize: 14, boxSizing: "border-box" }} />
-        </div>
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ fontSize: 11, fontWeight: 700, color: T.muted, display: "block", marginBottom: 6 }}>Link (opcional)</label>
-          <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://..." style={{ width: "100%", background: T.bg, border: `1px solid ${T.border}`, padding: "12px", borderRadius: 10, color: T.text, fontSize: 14, boxSizing: "border-box" }} />
-        </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${T.border}`, background: "none", color: T.muted, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
-          <button onClick={() => onSave({ name, url, price: Number(price) })} disabled={!name || !price} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: T.text, color: T.surface, fontSize: 14, fontWeight: 600, cursor: (name && price) ? "pointer" : "default", opacity: (name && price) ? 1 : 0.5 }}>Salvar</button>
+
+        <div style={{ display: "flex", gap: 12, marginTop: 32 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "12px", borderRadius: 12, border: `1px solid ${T.border}`, background: "none", color: T.muted, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+          <button onClick={() => onSave({ name, url, price: Number(price), category: category.trim() || "Geral" })} disabled={!name || !price} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: T.text, color: T.surface, fontSize: 14, fontWeight: 600, cursor: (name && price) ? "pointer" : "default", opacity: (name && price) ? 1 : 0.5 }}>{wishToEdit ? "Salvar" : "Adicionar"}</button>
         </div>
       </div>
     </div>
@@ -1834,10 +1949,37 @@ export default function CentralHome() {  const [isDarkMode, setIsDarkMode] = use
   const [finances, setFinances] = useLocalStorage("ch_finances", { balance: 0, monthlyIncome: 0 });
   const [wishlist, setWishlist] = useLocalStorage("ch_wishlist", []);
   const [toolboxes, setToolboxes] = useLocalStorage("ch_toolboxes", []);
-  const [showAddPeriod, setShowAddPeriod] = useState(false);
-  const [showAddToolbox, setShowAddToolbox] = useState(false);
-  const [editingToolbox, setEditingToolbox] = useState(null);
-  const pendingTotal = MOCK_ACTIVITIES.moodle.length + MOCK_ACTIVITIES.classroom.length; // will be dynamic once real data arrives
+
+  // Folder & Sharing State
+  const initialFolders = [{ id: "f_general", name: "Geral", icon: "Folder", color: "teal", ownerId: userProfile?.sub || "local" }];
+  const [folders, setFolders] = useLocalStorage("ch_folders", initialFolders);
+  const [activeFolderId, setActiveFolderId] = useState("f_general");
+
+  // Migration for old notes to General folder
+  useEffect(() => {
+    if (notes.some(n => !n.folderId)) {
+      setNotes(prev => prev.map(n => n.folderId ? n : { ...n, folderId: "f_general" }));
+    }
+  }, []);
+
+  useEffect(() => {
+    // Sync theme colors to document body for global consistency
+    document.body.style.backgroundColor = T.bg;
+    document.body.style.color = T.text;
+    document.body.style.transition = "background-color .3s ease, color .3s ease";
+  }, [T]);
+  
+  // Study Priority State
+  const initialMetrics = [
+    { id: "m1", label: "Conhecimento", type: "range", weight: 1, inversed: true, default: true },
+    { id: "m2", label: "Dificuldade", type: "range", weight: 1, inversed: false, default: true },
+    { id: "m3", label: "Dias para Prova", type: "date-urgency", weight: 1.5, inversed: false, default: true },
+    { id: "m4", label: "Dias sem Revisar", type: "date-delay", weight: 1, inversed: false, default: true }
+  ];
+  const [studySubjects, setStudySubjects] = useLocalStorage("ch_study_subjects", []);
+  const [studyMetrics, setStudyMetrics] = useLocalStorage("ch_study_metrics", initialMetrics);
+
+  const pendingTotal = MOCK_ACTIVITIES.moodle.length + MOCK_ACTIVITIES.classroom.length;
   const [editingNote, setEditingNote] = useState(null);
   const [editingProject, setEditingProject] = useState(null);
   const [editingPillar, setEditingPillar] = useState(null);
@@ -1845,6 +1987,9 @@ export default function CentralHome() {  const [isDarkMode, setIsDarkMode] = use
   const [activeSection, setActiveSection] = useState("home");
   const [toast, setToast] = useState(null);
   const [editingLink, setEditingLink] = useState(null);
+  const [showAddPeriod, setShowAddPeriod] = useState(false);
+  const [showAddToolbox, setShowAddToolbox] = useState(false);
+  const [editingToolbox, setEditingToolbox] = useState(null);
 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 3000); }
 
@@ -1974,18 +2119,7 @@ export default function CentralHome() {  const [isDarkMode, setIsDarkMode] = use
     showToast("✓ Horário movido");
   }
 
-  function saveNote(text) {
-    if (editingNote) {
-      setNotes(prev => prev.map(n => n.id === editingNote.id ? { ...n, text } : n));
-      setEditingNote(null);
-      showToast("✓ Nota atualizada");
-    } else {
-      setNotes(prev => [{ id: Date.now(), text, date: new Date().toLocaleDateString("pt-BR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) }, ...prev]);
-      showToast("✓ Nota salva");
-    }
-    setShowNote(false);
-    if (activeSection !== "notes") setActiveSection("notes");
-  }
+
 
   function deleteNote(id) { setNotes(prev => prev.filter(n => n.id !== id)); showToast("Nota removida"); }
   function deleteProject(id) { setProjects(prev => prev.filter(p => p.id !== id)); showToast("Projeto removido"); }
@@ -2007,6 +2141,7 @@ export default function CentralHome() {  const [isDarkMode, setIsDarkMode] = use
 
   const nav = [
     { id: "home", icon: <HomeIcon size={16} />, label: "Central" },
+    { id: "study", icon: <GraduationCap size={16} />, label: "Estudos" },
     { id: "notes", icon: <BookOpen size={16} />, label: `Notas${notes.length > 0 ? ` (${notes.length})` : ""}` },
     { id: "projects", icon: <Briefcase size={16} />, label: "Projetos" },
     { id: "periods", icon: <Calendar size={16} />, label: "Períodos" },
@@ -2015,7 +2150,7 @@ export default function CentralHome() {  const [isDarkMode, setIsDarkMode] = use
   ];
 
   const mainUI = (
-    <div className="animate-fade-in" style={{ minHeight: "100vh", background: T.bg, fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif", display: "flex", flexDirection: "column", transition: "background-color .3s ease, color .3s ease" }}>
+    <div className="animate-fade-in" style={{ minHeight: "100vh", background: T.bg, color: T.text, fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif", display: "flex", flexDirection: "column", transition: "background-color .3s ease, color .3s ease" }}>
 
       {/* top nav */}
       <header style={{ position: "sticky", top: 0, zIndex: 50, background: `${T.bg}ee`, backdropFilter: "blur(12px)", borderBottom: `1px solid ${T.border}`, padding: "0 2rem", transition: "all .3s ease" }}>
@@ -2026,10 +2161,13 @@ export default function CentralHome() {  const [isDarkMode, setIsDarkMode] = use
             <ClockWidget T={T} />
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <nav className="header-nav" style={{ display: "flex", gap: 6 }}>
+            <nav className="header-nav" style={{ display: "flex", gap: 4 }}>
               {nav.map(n => (
                 <button key={n.id} onClick={() => setActiveSection(n.id)}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 10, border: activeSection === n.id ? `2px solid ${T.text}` : "2px solid transparent", background: activeSection === n.id ? T.surface : "none", fontSize: 13, fontWeight: 500, color: activeSection === n.id ? T.text : T.muted, cursor: "pointer", fontFamily: "inherit", transition: "all .15s" }}>
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 20, border: "none", background: activeSection === n.id ? T.surface : "transparent", fontSize: 13, fontWeight: 500, color: activeSection === n.id ? T.text : T.textMid, cursor: "pointer", fontFamily: "inherit", transition: "all .2s" }}
+                  onMouseEnter={e => { if (activeSection !== n.id) e.currentTarget.style.color = T.text; }}
+                  onMouseLeave={e => { if (activeSection !== n.id) e.currentTarget.style.color = T.textMid; }}
+                >
                   {n.icon}
                   <span>{n.label}</span>
                 </button>
@@ -2038,30 +2176,35 @@ export default function CentralHome() {  const [isDarkMode, setIsDarkMode] = use
             <div style={{ width: 1, height: 24, background: T.border, margin: "0 8px" }}></div>
             <GoogleAuthArea T={T} userProfile={userProfile} setUserProfile={setUserProfile} apiConfig={apiConfig} setShowApiSettings={setShowApiSettings} setGoogleToken={setGoogleToken} />
             <button onClick={() => setShowPendingActivities(true)}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 10, border: `1px solid ${T.border}`, background: T.surface, fontSize: 13, fontWeight: 600, color: T.coral, cursor: "pointer", transition: "all .2s" }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = T.coral; e.currentTarget.style.background = T.coral + "1a"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = T.surface; }}
+              style={{ position: "relative", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", background: pendingTotal > 0 ? T.coral + "1a" : "transparent", border: pendingTotal > 0 ? `1px solid ${T.coral}40` : "none", color: pendingTotal > 0 ? T.coral : T.textMid, cursor: "pointer", transition: "all .2s" }}
+              onMouseEnter={e => { e.currentTarget.style.color = T.coral; e.currentTarget.style.background = T.surface; }}
+              onMouseLeave={e => { e.currentTarget.style.color = pendingTotal > 0 ? T.coral : T.textMid; e.currentTarget.style.background = pendingTotal > 0 ? T.coral + "1a" : "transparent"; }}
+              title="Notificações"
             >
-              <Bell size={16} />
-              <span className="mobile-hide">{pendingTotal} Pendentes</span>
+              <Bell size={18} />
+              {pendingTotal > 0 && <span style={{ position: "absolute", top: 0, right: 0, background: T.coral, color: "#fff", fontSize: 10, fontWeight: "bold", width: 16, height: 16, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${T.bg}` }}>{pendingTotal > 9 ? '9+' : pendingTotal}</span>}
             </button>
             <button onClick={() => setIsDarkMode(!isDarkMode)}
-              style={{ width: 44, height: 44, borderRadius: 10, border: `1px solid ${T.border}`, background: T.surface, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all .2s", color: isDarkMode ? "#FFD700" : "#FFA500" }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = T.borderMid; e.currentTarget.style.background = T.bg; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = T.surface; }}
+              style={{ width: 40, height: 40, borderRadius: "50%", background: "transparent", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all .2s", color: T.textMid }}
+              onMouseEnter={e => { e.currentTarget.style.background = T.surface; e.currentTarget.style.color = isDarkMode ? "#FFD700" : "#FFA500"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.textMid; }}
               title={isDarkMode ? "Modo claro" : "Modo escuro"}
             >
-              {isDarkMode ? <Moon size={20} /> : <Sun size={20} />}
+              {isDarkMode ? <Moon size={18} /> : <Sun size={18} />}
             </button>
             <div style={{ width: 1, height: 24, background: T.border, margin: "0 4px" }}></div>
             <button onClick={handleImportData}
-              style={{ width: 44, height: 44, borderRadius: 10, border: `1px solid ${T.border}`, background: T.surface, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all .2s", color: T.blue }}
+              style={{ width: 40, height: 40, borderRadius: "50%", background: "transparent", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all .2s", color: T.textMid }}
+              onMouseEnter={e => { e.currentTarget.style.background = T.surface; e.currentTarget.style.color = T.blue; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.textMid; }}
               title="Importar Backup"
             >
               <Upload size={18} />
             </button>
             <button onClick={handleExportData}
-              style={{ width: 44, height: 44, borderRadius: 10, border: `1px solid ${T.border}`, background: T.surface, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all .2s", color: T.teal }}
+              style={{ width: 40, height: 40, borderRadius: "50%", background: "transparent", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all .2s", color: T.textMid }}
+              onMouseEnter={e => { e.currentTarget.style.background = T.surface; e.currentTarget.style.color = T.teal; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.textMid; }}
               title="Exportar Backup"
             >
               <Download size={18} />
@@ -2072,15 +2215,26 @@ export default function CentralHome() {  const [isDarkMode, setIsDarkMode] = use
 
       <main key={activeSection} className="animate-slide-up" style={{ flex: 1, maxWidth: 1600, width: "100%", margin: "0 auto", padding: "2rem", paddingBottom: "4rem" }}>
 
+        {/* ── STUDY ──────────────────────────────────────────────────────── */}
+        {activeSection === "study" && (
+          <StudySection 
+            T={T} 
+            subjects={studySubjects} 
+            setSubjects={setStudySubjects} 
+            metrics={studyMetrics} 
+            setMetrics={setStudyMetrics} 
+            showToast={showToast} 
+          />
+        )}
+
         {/* ── HOME ──────────────────────────────────────────────────────── */}
         {activeSection === "home" && (
           <div className="home-layout">
             {/* Left column */}
             <div>
-              <div style={{ marginBottom: "3rem" }}>
-                <p style={{ fontSize: 12, color: T.faint, letterSpacing: ".08em", marginBottom: ".5rem", textTransform: "uppercase" }}>{today()}</p>
-                <h1 style={{ fontSize: 32, fontWeight: 300, color: T.text, fontFamily: "'DM Serif Display', serif", lineHeight: 1.2 }}>
-                  Bem-vindo,<br /><em style={{ fontStyle: "italic", color: T.accent }}>{userProfile ? (userProfile.given_name || userProfile.name) + "." : "Central Home."}</em>
+              <div style={{ marginBottom: "2rem" }}>
+                <h1 style={{ fontSize: 26, fontWeight: 400, color: T.text, fontFamily: "'DM Serif Display', serif", lineHeight: 1.3, margin: 0 }}>
+                  Bem-vindo, <em style={{ fontStyle: "italic", color: T.accent }}>{userProfile ? (userProfile.given_name || userProfile.name) : "Central Home"}</em>.
                 </h1>
               </div>
 
@@ -2146,7 +2300,7 @@ export default function CentralHome() {  const [isDarkMode, setIsDarkMode] = use
               <SectionLabel T={T}>Ações Rápidas</SectionLabel>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: "2rem" }}>
                 <button onClick={() => setShowNote(true)}
-                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderRadius: 12, border: `2px solid ${T.text}`, background: T.text, fontSize: 14, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "inherit", transition: "all .1s" }}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderRadius: 12, border: `1px solid ${T.text}`, background: T.text, fontSize: 14, fontWeight: 600, color: T.bg, cursor: "pointer", fontFamily: "inherit", transition: "all .1s" }}
                   onMouseEnter={e => { e.currentTarget.style.background = T.accent; e.currentTarget.style.transform = "translateX(4px)"; }}
                   onMouseLeave={e => { e.currentTarget.style.background = T.text; e.currentTarget.style.transform = "translateX(0)"; }}
                 >
@@ -2162,7 +2316,7 @@ export default function CentralHome() {  const [isDarkMode, setIsDarkMode] = use
                     >
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: T[q.dot] || q.dot, display: "inline-block", flexShrink: 0 }} />
                       {q.label}
-                      {!q.url && <span style={{ fontSize: 10, color: T.faint, marginLeft: "auto" }}>configurar</span>}
+                      {/* Removido textual label para limpar UI */}
                     </button>
                     <button onClick={() => setEditingLink({ item: q, type: "quick" })} title="Editar link" style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${T.border}`, background: "none", color: T.faint, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .1s" }} onMouseEnter={e => { e.currentTarget.style.color = T.text; e.currentTarget.style.borderColor = T.borderMid; }} onMouseLeave={e => { e.currentTarget.style.color = T.faint; e.currentTarget.style.borderColor = T.border; }}><Pencil size={14} /></button>
                   </div>
@@ -2292,39 +2446,17 @@ export default function CentralHome() {  const [isDarkMode, setIsDarkMode] = use
                 <Plus size={16} /> Nova Nota
               </button>
             </div>
-            {notes.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "6rem 2rem" }}>
-                <p style={{ fontSize: 16, color: T.faint, marginBottom: 20 }}>Nenhuma nota salva ainda</p>
-                <button onClick={() => setShowNote(true)} style={{ padding: "12px 24px", borderRadius: 12, border: `2px solid ${T.border}`, background: "none", fontSize: 14, fontWeight: 600, color: T.text, cursor: "pointer", fontFamily: "inherit", transition: "all .1s" }}
-                  onMouseEnter={e => { e.currentTarget.style.background = T.text; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = T.text; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = T.text; e.currentTarget.style.borderColor = T.border; }}
-                >Criar Primeira Nota</button>
-              </div>
-            ) : (
-              <div className="notes-grid">
-                {notes.map(n => (
-                  <div key={n.id} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 14, padding: "1.4rem", position: "relative", transition: "border-color .1s, boxShadow .1s" }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = T.borderMid; e.currentTarget.style.boxShadow = "0 8px 16px rgba(0,0,0,.08)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = "none"; }}
-                  >
-                    <p style={{ fontSize: 14, color: T.text, lineHeight: 1.6, marginBottom: "1rem", whiteSpace: "pre-wrap", wordBreak: "break-word", minHeight: 80 }}>{n.text}</p>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "1rem", borderTop: `1px solid ${T.border}` }}>
-                      <span style={{ fontSize: 11, color: T.faint }}>{n.date}</span>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button onClick={() => { setEditingNote(n); setShowNote(true); }} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: T.faint, background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "inherit", fontWeight: 500, transition: "color .1s" }}
-                          onMouseEnter={e => e.currentTarget.style.color = T.text}
-                          onMouseLeave={e => e.currentTarget.style.color = T.faint}
-                        ><Pencil size={12} /> editar</button>
-                        <button onClick={() => deleteNote(n.id)} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: T.faint, background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "inherit", fontWeight: 500, transition: "color .1s" }}
-                          onMouseEnter={e => e.currentTarget.style.color = T.coral}
-                          onMouseLeave={e => e.currentTarget.style.color = T.faint}
-                        ><Trash2 size={12} /> apagar</button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <NotesSection 
+              T={T} 
+              notes={notes} 
+              setNotes={setNotes} 
+              showToast={showToast}
+              folders={folders}
+              setFolders={setFolders}
+              activeFolderId={activeFolderId}
+              setActiveFolderId={setActiveFolderId}
+              userProfile={userProfile}
+            />
           </div>
         )}
 
@@ -2438,7 +2570,7 @@ export default function CentralHome() {  const [isDarkMode, setIsDarkMode] = use
       {showPendingActivities && <PendingActivitiesModal onClose={() => setShowPendingActivities(false)} T={T} config={apiConfig} onOpenSettings={() => { setShowPendingActivities(false); setShowApiSettings(true); }} googleToken={googleToken} setGoogleToken={setGoogleToken} userProfile={userProfile} setUserProfile={setUserProfile} />}
       {showApiSettings && <ApiSettingsModal onClose={() => setShowApiSettings(false)} T={T} config={apiConfig} onSave={(cfg) => { setApiConfig(cfg); showToast("✓ Credenciais salvas!"); }} />}
       {showAddPeriod && <AddPeriodModal onClose={() => setShowAddPeriod(false)} onAdd={p => { setPeriods(prev => [...prev, p]); setShowAddPeriod(false); showToast("✓ Período criado"); }} T={T} />}
-      {showNote && <NoteModal onClose={() => {setShowNote(false); setEditingNote(null);}} onSave={saveNote} T={T} editingNote={editingNote} />}
+
       {showAddProject && <AddProjectModal onClose={() => setShowAddProject(false)} onAdd={addProject} T={T} />}
       {editingProject && <EditProjectModal project={editingProject} onClose={() => setEditingProject(null)} onSave={updateProject} T={T} />}
       {showAddPillar && <AddPillarModal onClose={() => setShowAddPillar(false)} onAdd={addPillar} T={T} />}
