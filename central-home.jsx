@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { DndContext, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, DragOverlay, defaultDropAnimationSideEffects } from "@dnd-kit/core";
-import { restrictToWindowEdges } from "@dnd-kit/modifiers";
-import { CSS } from "@dnd-kit/utilities";
+import FullCalendar from "@fullcalendar/react";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
 import { Hexagon, Circle, Square, Triangle, Folder, BookOpen, Heart, Briefcase, Home as HomeIcon, Pencil, Trash2, Plus, X, Moon, Sun, Bell, Settings, RefreshCw, ExternalLink, AlertCircle, LogOut, User, Calendar, Zap, Box, ChevronUp, ChevronDown, Wallet, DollarSign, Target, ShoppingBag, PieChart, Bot, Download, Upload, Search, Archive, GraduationCap, Layers, Star } from "lucide-react";
 import { GoogleOAuthProvider, useGoogleLogin, googleLogout } from "@react-oauth/google";
 
@@ -11,7 +11,7 @@ import { StudySection } from "./src/features/study/StudySection.jsx";
 
 // Firebase App Data
 import { auth, isConfigured } from "./src/config/firebase.js";
-import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged } from "firebase/auth";
 
 
 const IconMap = {
@@ -385,200 +385,162 @@ function AddProjectModal({ onClose, onAdd, T }) {
   );
 }
 
-/* ─── Weekly Schedule ─────────────────────────────────────────────────────── */
-/* ─── Drag and Drop Components ────────────────────────────────────────────── */
-function DraggableClass({ cls, day, slot, T, isDarkMode }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `class-${day}-${slot}`,
-    data: { cls, day, slot }
-  });
-
-  // High contrast text choice:
-  // In Light Mode (isDarkMode=false), T.teal is dark -> use WHITE text
-  // In Dark Mode (isDarkMode=true), T.teal is light -> use DARK text
-  const textColor = isDarkMode ? "#1A1916" : "#FFFFFF";
-
-  const style = {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.4 : 1,
-    cursor: "grab",
-    textAlign: "center",
-    zIndex: isDragging ? 20 : 1,
-    padding: "8px",
-    background: T.teal,
-    color: textColor,
-    width: "100%",
-    height: "100%",
-    minHeight: "80px",
-    boxSizing: "border-box",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    transition: "transform 0.1s ease, color 0.15s ease, background 0.15s ease",
-    userSelect: "none",
-    borderRadius: "6px"
-  };
-
-  return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
-      <div style={{ fontWeight: 700, marginBottom: 2, fontSize: 12, lineHeight: 1.1 }}>{cls.subject}</div>
-      <div style={{ fontSize: 10, opacity: 0.9 }}>{cls.room}</div>
-      <div style={{ fontSize: 10, opacity: 0.8, marginTop: 2, fontStyle: 'italic' }}>{cls.professor}</div>
-    </div>
-  );
-}
-
-function DroppableSlot({ day, slot, children, isToday, T, onEdit, cls }) {
-  const { isOver, setNodeRef } = useDroppable({
-    id: `slot-${day}-${slot}`,
-    data: { day, slot }
-  });
-
-  const tdStyle = {
-    padding: 2,
-    border: `1px solid ${T.border}`,
-    height: 80,
-    borderLeft: isToday ? `3px solid ${T.teal}` : `1px solid ${T.border}`,
-    borderRight: isToday ? `3px solid ${T.teal}10` : `1px solid ${T.border}`,
-    background: T.surface,
-    position: "relative",
-    textAlign: "center",
-    verticalAlign: "middle",
-    transition: "background 0.2s"
-  };
-
-  const innerStyle = {
-    width: "100%",
-    height: "100%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: isOver ? T.tealBg : (cls ? "transparent" : "transparent"),
-    borderRadius: 8,
-    cursor: "pointer",
-    transition: "all .15s ease-out",
-    boxShadow: isOver ? `inset 0 0 0 2px ${T.teal}40` : "none",
-    zIndex: isOver ? 5 : 1
-  };
-
-  return (
-    <td style={tdStyle} onClick={() => onEdit(day, slot)}>
-      <div ref={setNodeRef} style={innerStyle}>
-        {children}
-        {!cls && !isOver && (
-          <div className="empty-plus" style={{ opacity: 0, transition: "opacity .2s", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%", pointerEvents: "none" }}>
-            <Plus size={18} color={T.faint} />
-          </div>
-        )}
-      </div>
-    </td>
-  );
-}
-
+/* ─── Weekly Schedule (FullCalendar) ────────────────────────────────────── */
 function Schedule({ schedule, onEdit, onMoveClass, T, isDarkMode }) {
-  const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-  const dayLabels = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
-  const jsDayIdx = new Date().getDay();
-  const todayColIdx = (jsDayIdx >= 1 && jsDayIdx <= 6) ? jsDayIdx - 1 : -1;
+  const DAYS_ORDER = ["monday","tuesday","wednesday","thursday","friday","saturday"];
+  const JS_TO_DAY  = {1:"monday",2:"tuesday",3:"wednesday",4:"thursday",5:"friday",6:"saturday"};
 
-  const [activeId, setActiveId] = useState(null);
-  const [activeData, setActiveData] = useState(null);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 5 }, // Previne drag acidental em cliques
-    })
-  );
-
-  function handleDragStart(event) {
-    setActiveId(event.active.id);
-    setActiveData(event.active.data.current);
+  function padTime(t) {
+    const [h, m] = t.split(":");
+    return `${h.padStart(2,"0")}:${(m||"00").padStart(2,"0")}`;
+  }
+  function getWeekMonday() {
+    const now = new Date(), day = now.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    const mon = new Date(now);
+    mon.setDate(now.getDate() + diff);
+    mon.setHours(0,0,0,0);
+    return mon;
   }
 
-  function handleDragEnd(event) {
-    setActiveId(null);
-    setActiveData(null);
-    const { active, over } = event;
+  const events = useMemo(() => {
+    const monday = getWeekMonday();
+    const result = [];
+    DAYS_ORDER.forEach((day, di) => {
+      const date = new Date(monday);
+      date.setDate(monday.getDate() + di);
+      const dateStr = date.toISOString().split("T")[0];
+      (schedule.classes[day] || []).forEach(cls => {
+        const ts = schedule.timeSlots[cls.slot];
+        if (!ts) return;
+        result.push({
+          id: `${day}-${cls.slot}`,
+          title: cls.subject,
+          start: `${dateStr}T${padTime(ts.start)}:00`,
+          end:   `${dateStr}T${padTime(ts.end)}:00`,
+          extendedProps: { room: cls.room, professor: cls.professor, day, slot: cls.slot, cls }
+        });
+      });
+    });
+    return result;
+  }, [schedule]);
 
-    if (over && active.data.current) {
-      const source = active.data.current;
-      const target = over.data.current;
+  const slotMinTime = useMemo(() =>
+    schedule.timeSlots.length > 0 ? padTime(schedule.timeSlots[0].start)+":00" : "07:00:00",
+    [schedule.timeSlots]);
+  const slotMaxTime = useMemo(() => {
+    if (!schedule.timeSlots.length) return "18:00:00";
+    return padTime(schedule.timeSlots[schedule.timeSlots.length-1].end)+":00";
+  }, [schedule.timeSlots]);
 
-      if (source.day !== target.day || source.slot !== target.slot) {
-        onMoveClass(source.day, source.slot, target.day, target.slot, source.cls);
-      }
-    }
+  function findNearestSlot(hour, minute) {
+    const clicked = hour*60 + minute;
+    let closest = -1, minDiff = Infinity;
+    schedule.timeSlots.forEach((ts, idx) => {
+      const [h,m] = ts.start.split(":").map(Number);
+      const diff = Math.abs((h*60+m) - clicked);
+      if (diff < minDiff) { minDiff = diff; closest = idx; }
+    });
+    return minDiff <= 30 ? closest : -1;
   }
 
-  const dropAnimation = {
-    sideEffects: defaultDropAnimationSideEffects({
-      styles: {
-        active: {
-          opacity: '0.5',
-        },
-      },
-    }),
-  };
+  function handleEventDrop({ event, revert }) {
+    const { day: oldDay, slot: oldSlot, cls } = event.extendedProps;
+    const newDay  = JS_TO_DAY[event.start.getDay()];
+    const newSlot = findNearestSlot(event.start.getHours(), event.start.getMinutes());
+    revert();
+    if (!newDay || newSlot === -1) return;
+    if (oldDay === newDay && oldSlot === newSlot) return;
+    onMoveClass(oldDay, oldSlot, newDay, newSlot, cls);
+  }
+
+  function handleDateClick({ date }) {
+    const day = JS_TO_DAY[date.getDay()];
+    if (!day) return;
+    const slot = findNearestSlot(date.getHours(), date.getMinutes());
+    if (slot !== -1) onEdit(day, slot);
+  }
+
+  function handleEventClick({ event }) {
+    onEdit(event.extendedProps.day, event.extendedProps.slot);
+  }
+
+  function renderEventContent(info) {
+    const { room, professor } = info.event.extendedProps;
+    const txtColor = isDarkMode ? "#1A1916" : "#FFFFFF";
+    return (
+      <div style={{ padding:"4px 7px", overflow:"hidden", height:"100%", cursor:"grab" }}>
+        <div style={{ fontWeight:700, fontSize:11, lineHeight:1.3, color:txtColor, wordBreak:"break-word" }}>{info.event.title}</div>
+        {room      && <div style={{ fontSize:9, color:txtColor, opacity:0.85, marginTop:2 }}>{room}</div>}
+        {professor && <div style={{ fontSize:9, color:txtColor, opacity:0.75, marginTop:1, fontStyle:"italic" }}>{professor}</div>}
+      </div>
+    );
+  }
+
+  useEffect(() => {
+    const id = "fc-custom-theme";
+    let style = document.getElementById(id);
+    if (!style) { style = document.createElement("style"); style.id = id; document.head.appendChild(style); }
+    style.textContent = `
+      .fc { font-family: 'DM Sans','Helvetica Neue',sans-serif; }
+      .fc .fc-scrollgrid { border-color: ${T.border} !important; }
+      .fc td,.fc th { border-color: ${T.border} !important; }
+      .fc .fc-col-header-cell { background: ${T.bg} !important; }
+      .fc .fc-col-header-cell-cushion { color: ${T.muted} !important; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.08em; padding:10px 6px; text-decoration:none !important; }
+      .fc .fc-day-today .fc-col-header-cell-cushion { color: ${T.teal} !important; }
+      .fc .fc-day-today .fc-timegrid-col { background: ${T.tealBg}44 !important; }
+      .fc .fc-timegrid-slot-label-cushion { color: ${T.muted} !important; font-size:11px; font-weight:500; }
+      .fc .fc-timegrid-axis-cushion { color: ${T.muted} !important; font-size:11px; }
+      .fc .fc-timegrid-body,.fc .fc-scroller,.fc .fc-view-harness,.fc .fc-timegrid-col-bg { background: ${T.surface} !important; }
+      .fc-event { border-radius:8px !important; background:${T.teal} !important; border-color:${T.teal} !important; box-shadow:0 2px 8px rgba(0,0,0,.15) !important; cursor:grab !important; }
+      .fc-event:hover { filter:brightness(1.08); }
+      .fc .fc-event-main { padding:0 !important; }
+      .fc .fc-highlight { background:${T.tealBg} !important; }
+      .fc .fc-timegrid-now-indicator-line { border-color:${T.teal} !important; border-width:2px; }
+      .fc .fc-timegrid-now-indicator-arrow { border-top-color:${T.teal} !important; border-bottom-color:${T.teal} !important; }
+    `;
+  }, [T]);
 
   return (
-    <div className="schedule-container">
-      <DndContext sensors={sensors} modifiers={[restrictToWindowEdges]} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: "1000px" }}>
-          <thead>
-            <tr>
-              <th style={{ padding: "16px 12px", textAlign: "left", color: T.muted, fontWeight: 600, fontSize: 12, textTransform: "uppercase", letterSpacing: ".1em", borderBottom: `2px solid ${T.border}` }}>Horário</th>
-              {dayLabels.map((day, i) => (
-                <th key={day} style={{ padding: "16px 12px", textAlign: "center", borderBottom: `2px solid ${i === todayColIdx ? T.teal : T.border}`, borderLeft: `1px solid ${T.border}`, borderRight: `1px solid ${T.border}`, color: i === todayColIdx ? T.teal : T.muted, fontWeight: i === todayColIdx ? 700 : 600, fontSize: 12, textTransform: "uppercase", letterSpacing: ".1em", background: i === todayColIdx ? T.tealBg : "transparent" }}>{day}{i === todayColIdx ? " ·" : ""}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {schedule.timeSlots.map((slot, idx) => (
-              <tr key={idx}>
-                <td style={{ padding: "18px 12px", color: T.muted, fontWeight: 600, fontSize: 12, borderBottom: `1px solid ${T.border}` }}>{slot.start} - {slot.end}</td>
-                {DAYS.map((day, di) => {
-                  const cls = schedule.classes[day]?.find(c => c.slot === idx);
-                  const isToday = di === todayColIdx;
-                  return (
-                    <DroppableSlot key={`${day}-${idx}`} day={day} slot={idx} isToday={isToday} T={T} onEdit={onEdit} cls={cls}>
-                      {cls ? <DraggableClass cls={cls} day={day} slot={idx} T={T} isDarkMode={isDarkMode} /> : null}
-                    </DroppableSlot>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <DragOverlay dropAnimation={dropAnimation} style={{ zIndex: 1000, pointerEvents: "none" }}>
-          {activeId && activeData ? (
-            <div style={{ 
-              padding: "14px", 
-              borderRadius: "12px", 
-              background: T.teal, 
-              color: "#fff", 
-              boxShadow: "0 12px 40px rgba(0,0,0,0.25)", 
-              width: "160px", 
-              cursor: "grabbing",
-              border: "1px solid rgba(255,255,255,0.2)",
-              transform: "scale(1.05)",
-              transition: "transform 0.1s ease"
-            }}>
-              <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 13, textShadow: "0 1px 2px rgba(0,0,0,0.1)" }}>{activeData.cls.subject}</div>
-              <div style={{ fontSize: 11, opacity: 0.9 }}>{activeData.cls.room}</div>
-              <div style={{ fontSize: 10, opacity: 0.8, marginTop: 4, fontStyle: "italic" }}>{activeData.cls.professor}</div>
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
-      
-      <button onClick={() => onEdit(null, null)} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 24, padding: "12px 20px", borderRadius: 12, border: `1px solid ${T.border}`, background: T.surface, fontSize: 14, color: T.text, cursor: "pointer", fontFamily: "inherit", fontWeight: 600, transition: "all .2s", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}
-        onMouseEnter={e => { e.currentTarget.style.borderColor = T.text; e.currentTarget.style.transform = "translateY(-1px)"; }}
-        onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.transform = "translateY(0)"; }}
-      ><Pencil size={15} /> Editar Grade Completa</button>
+    <div style={{ borderRadius:12, border:`1px solid ${T.border}`, overflow:"hidden", marginBottom:"1.5rem", background:T.surface }}>
+      <FullCalendar
+        plugins={[timeGridPlugin, interactionPlugin]}
+        initialView="timeGridWeek"
+        initialDate={getWeekMonday()}
+        events={events}
+        editable={true}
+        eventDrop={handleEventDrop}
+        dateClick={handleDateClick}
+        eventClick={handleEventClick}
+        eventContent={renderEventContent}
+        headerToolbar={false}
+        allDaySlot={false}
+        slotMinTime={slotMinTime}
+        slotMaxTime={slotMaxTime}
+        hiddenDays={[0]}
+        firstDay={1}
+        slotDuration="00:15:00"
+        snapDuration="00:05:00"
+        slotLabelInterval="01:00"
+        slotLabelFormat={{ hour:"2-digit", minute:"2-digit", hour12:false }}
+        dayHeaderFormat={{ weekday:"short" }}
+        height="auto"
+      />
+      <div style={{ padding:"12px 16px", borderTop:`1px solid ${T.border}`, background:T.surface }}>
+        <button
+          onClick={() => onEdit(null, null)}
+          style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 18px", borderRadius:10, border:`1px solid ${T.border}`, background:T.bg, fontSize:13, color:T.text, cursor:"pointer", fontFamily:"inherit", fontWeight:600, transition:"all .2s" }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor=T.text; e.currentTarget.style.transform="translateY(-1px)"; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor=T.border; e.currentTarget.style.transform="translateY(0)"; }}
+        ><Pencil size={15} /> Editar Grade Completa</button>
+      </div>
     </div>
   );
 }
+
+
+
+
 
 function TimeSlotsEditor({ schedule, onSave, onClose, T }) {
   const [slots, setSlots] = useState(JSON.parse(JSON.stringify(schedule.timeSlots)));
@@ -1318,6 +1280,29 @@ function GoogleAuthArea({ T, userProfile, setUserProfile, apiConfig, setShowApiS
     );
   }
 
+  const isProduction = window.location.protocol === "https:";
+
+  // Handle redirect result after returning from Google login page (production only)
+  useEffect(() => {
+    if (!auth || !isConfigured) return;
+    getRedirectResult(auth)
+      .then((result) => {
+        if (!result) return; // No redirect result, normal flow
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        setUserProfile({
+          sub: result.user.uid,
+          name: result.user.displayName,
+          given_name: result.user.displayName?.split(' ')[0] || "Usuário",
+          picture: result.user.photoURL,
+          email: result.user.email
+        });
+        if (credential?.accessToken) setGoogleToken(credential.accessToken);
+      })
+      .catch((err) => {
+        if (err.code !== 'auth/no-auth-event') console.error("Redirect login error:", err);
+      });
+  }, []);
+
   const handleFirebaseLogin = async () => {
     if (!auth) return;
     try {
@@ -1325,25 +1310,26 @@ function GoogleAuthArea({ T, userProfile, setUserProfile, apiConfig, setShowApiS
       provider.setCustomParameters({ prompt: 'select_account' });
       provider.addScope("https://www.googleapis.com/auth/classroom.coursework.me.readonly");
       provider.addScope("https://www.googleapis.com/auth/classroom.courses.readonly");
-      
-      const result = await signInWithPopup(auth, provider);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      
-      setUserProfile({
-        sub: result.user.uid,
-        name: result.user.displayName,
-        given_name: result.user.displayName?.split(' ')[0] || "Usuário",
-        picture: result.user.photoURL,
-        email: result.user.email
-      });
-      
-      if (credential?.accessToken) {
-        setGoogleToken(credential.accessToken);
+
+      if (isProduction) {
+        // In production (HTTPS/Vercel), use redirect to avoid popup-blocking issues
+        await signInWithRedirect(auth, provider);
       } else {
-        setGoogleToken(null);
+        // In localhost (HTTP), popup is fine and faster for development
+        const result = await signInWithPopup(auth, provider);
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        setUserProfile({
+          sub: result.user.uid,
+          name: result.user.displayName,
+          given_name: result.user.displayName?.split(' ')[0] || "Usuário",
+          picture: result.user.photoURL,
+          email: result.user.email
+        });
+        if (credential?.accessToken) setGoogleToken(credential.accessToken);
+        else setGoogleToken(null);
       }
     } catch (error) {
-      console.error(error);
+      if (error.code !== 'auth/popup-closed-by-user') console.error(error);
     }
   };
 
