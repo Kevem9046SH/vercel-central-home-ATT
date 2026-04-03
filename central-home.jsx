@@ -385,17 +385,16 @@ function AddProjectModal({ onClose, onAdd, T }) {
 
 /* ─── Weekly Schedule ─────────────────────────────────────────────────────── */
 /* ─── Drag and Drop Components ────────────────────────────────────────────── */
-function DraggableClass({ cls, day, slot, T }) {
+function DraggableClass({ cls, day, slot, T, isDarkMode }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `class-${day}-${slot}`,
     data: { cls, day, slot }
   });
 
-  // Calculate high-contrast text color based on the teal background
-  // LIGHT_THEME.teal is dark -> white text
-  // DARK_THEME.teal is light -> dark text
-  const isDarkTeal = T.teal === "#0F6E56"; 
-  const textColor = isDarkTeal ? "#FFFFFF" : "#1A1916";
+  // High contrast text choice:
+  // In Light Mode (isDarkMode=false), T.teal is dark -> use WHITE text
+  // In Dark Mode (isDarkMode=true), T.teal is light -> use DARK text
+  const textColor = isDarkMode ? "#1A1916" : "#FFFFFF";
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -474,7 +473,7 @@ function DroppableSlot({ day, slot, children, isToday, T, onEdit, cls }) {
   );
 }
 
-function Schedule({ schedule, onEdit, onMoveClass, T }) {
+function Schedule({ schedule, onEdit, onMoveClass, T, isDarkMode }) {
   const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
   const dayLabels = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
   const jsDayIdx = new Date().getDay();
@@ -540,7 +539,7 @@ function Schedule({ schedule, onEdit, onMoveClass, T }) {
                   const isToday = di === todayColIdx;
                   return (
                     <DroppableSlot key={`${day}-${idx}`} day={day} slot={idx} isToday={isToday} T={T} onEdit={onEdit} cls={cls}>
-                      {cls ? <DraggableClass cls={cls} day={day} slot={idx} T={T} /> : null}
+                      {cls ? <DraggableClass cls={cls} day={day} slot={idx} T={T} isDarkMode={isDarkMode} /> : null}
                     </DroppableSlot>
                   );
                 })}
@@ -2097,23 +2096,23 @@ export default function CentralHome() {  const [isDarkMode, setIsDarkMode] = use
   function moveClass(sourceDay, sourceSlot, targetDay, targetSlot, cls) {
     setSchedule(prev => {
       const next = JSON.parse(JSON.stringify(prev));
-      // Remove da origem
+      // Remove from source
       if (next.classes[sourceDay]) {
         next.classes[sourceDay] = next.classes[sourceDay].filter(c => c.slot !== sourceSlot);
       }
-      // Garante que array de destino exista
+      // Ensure target array exists
       if (!next.classes[targetDay]) {
         next.classes[targetDay] = [];
       }
-      // Substitui ou adiciona no destino
-      const existingIdx = next.classes[targetDay].findIndex(c => c.slot === targetSlot);
+      // Move class item and update its slot index
       const newCls = { ...cls, slot: targetSlot };
       
-      if (existingIdx !== -1) {
-        next.classes[targetDay][existingIdx] = newCls;
-      } else {
-        next.classes[targetDay].push(newCls);
-      }
+      // Remove any existing class at target slot in the target day
+      next.classes[targetDay] = next.classes[targetDay].filter(c => c.slot !== targetSlot);
+      
+      // Add the moved class
+      next.classes[targetDay].push(newCls);
+      
       return next;
     });
     showToast("✓ Horário movido");
@@ -2240,7 +2239,7 @@ export default function CentralHome() {  const [isDarkMode, setIsDarkMode] = use
 
               {/* weekly schedule */}
               <SectionLabel T={T}>Horário da Semana</SectionLabel>
-              <Schedule schedule={schedule} onEdit={openScheduleEditor} onMoveClass={moveClass} T={T} />
+              <Schedule schedule={schedule} onEdit={openScheduleEditor} onMoveClass={moveClass} T={T} isDarkMode={isDarkMode} />
 
               {/* pillars - more prominent */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
