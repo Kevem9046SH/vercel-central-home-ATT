@@ -4,7 +4,7 @@ import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDDA_OYOZsHvA-pN5SKZCK2fe1t7CV7JY8",
-  authDomain: "central-home-a6779.firebaseapp.com",
+  authDomain: window.location.hostname === "localhost" ? "central-home-a6779.firebaseapp.com" : window.location.hostname,
   projectId: "central-home-a6779",
   storageBucket: "central-home-a6779.firebasestorage.app",
   messagingSenderId: "524918321734",
