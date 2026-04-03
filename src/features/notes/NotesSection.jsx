@@ -75,43 +75,53 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
   const saveNote = async (text) => {
     const isOnline = isConfigured && userProfile?.sub;
     
-    if (editingNote) {
-      if (isOnline && !editingNote.id.toString().startsWith("temp_")) {
-        await updateDoc(doc(db, "notes", editingNote.id), { text });
+    try {
+      if (editingNote) {
+        if (isOnline && !editingNote.id.toString().startsWith("temp_")) {
+          await updateDoc(doc(db, "notes", editingNote.id), { text });
+        } else {
+          setNotes(prev => prev.map(n => n.id === editingNote.id ? { ...n, text } : n));
+        }
+        setEditingNote(null);
+        showToast("✓ Nota atualizada");
       } else {
-        setNotes(prev => prev.map(n => n.id === editingNote.id ? { ...n, text } : n));
+        const newNote = {
+          text,
+          folderId: activeFolderId,
+          date: new Date().toLocaleDateString("pt-BR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }),
+          ownerId: userProfile?.sub || "local",
+          createdAt: serverTimestamp()
+        };
+        
+        if (isOnline) {
+          await addDoc(collection(db, "notes"), newNote);
+        } else {
+          setNotes(prev => [{ id: "temp_" + Date.now(), ...newNote }, ...prev]);
+        }
+        showToast("✓ Nota salva");
       }
-      setEditingNote(null);
-      showToast("✓ Nota atualizada");
-    } else {
-      const newNote = {
-        text,
-        folderId: activeFolderId,
-        date: new Date().toLocaleDateString("pt-BR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }),
-        ownerId: userProfile?.sub || "local",
-        createdAt: serverTimestamp()
-      };
-      
-      if (isOnline) {
-        await addDoc(collection(db, "notes"), newNote);
-      } else {
-        setNotes(prev => [{ id: "temp_" + Date.now(), ...newNote }, ...prev]);
-      }
-      showToast("✓ Nota salva");
+      setShowNote(false);
+    } catch (err) {
+      console.error("Erro ao salvar nota:", err);
+      showToast("❌ Erro ao salvar: " + err.message);
     }
-    setShowNote(false);
   };
 
   const deleteNote = async (id) => {
     if (window.confirm("Tem certeza que deseja excluir esta nota?")) {
       const isOnline = isConfigured && userProfile?.sub && !id.toString().startsWith("temp_");
-      if (isOnline) {
-        await deleteDoc(doc(db, "notes", id));
-      } else {
-        setNotes(prev => prev.filter(n => n.id !== id));
+      try {
+        if (isOnline) {
+          await deleteDoc(doc(db, "notes", id));
+        } else {
+          setNotes(prev => prev.filter(n => n.id !== id));
+        }
+        showToast("Nota removida");
+        if (viewNote?.id === id) setViewNote(null);
+      } catch (err) {
+        console.error("Erro ao excluir nota:", err);
+        showToast("❌ Erro ao excluir: " + err.message);
       }
-      showToast("Nota removida");
-      if (viewNote?.id === id) setViewNote(null);
     }
   };
 
@@ -123,15 +133,20 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
       shared: false
     };
     
-    if (isConfigured && userProfile?.sub) {
-      await addDoc(collection(db, "folders"), newFolder);
-    } else {
-      setFolders([...folders, { id: "f_" + Date.now(), ...newFolder }]);
+    try {
+      if (isConfigured && userProfile?.sub) {
+        await addDoc(collection(db, "folders"), newFolder);
+      } else {
+        setFolders([...folders, { id: "f_" + Date.now(), ...newFolder }]);
+      }
+      
+      setFolderName("");
+      setShowFolderModal(false);
+      showToast("✓ Pasta criada");
+    } catch (err) {
+      console.error("Erro ao criar pasta:", err);
+      showToast("❌ Erro ao criar pasta: " + err.message);
     }
-    
-    setFolderName("");
-    setShowFolderModal(false);
-    showToast("✓ Pasta criada");
   };
 
   const generateCode = async (folder) => {
@@ -141,63 +156,78 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
     setShowShareModal(true);
     
     if (isConfigured && userProfile?.sub) {
-      await addDoc(collection(db, "invites"), {
-        code,
-        folderId: folder.id,
-        folderName: folder.name,
-        senderName: userProfile.name || "Usuário",
-        senderId: userProfile.sub,
-        createdAt: serverTimestamp(),
-        status: "active"
-      });
+      try {
+        await addDoc(collection(db, "invites"), {
+          code,
+          folderId: folder.id,
+          folderName: folder.name,
+          senderName: userProfile.name || "Usuário",
+          senderId: userProfile.sub,
+          createdAt: serverTimestamp(),
+          status: "active"
+        });
+      } catch (err) {
+        console.error("Erro ao gerar código de compartilhamento:", err);
+        showToast("❌ Erro ao compartilhar: O navegador bloqueou a conexão ou você não está logado.");
+      }
     }
   };
 
   const handleJoin = async () => {
     if (inputCode.length !== 6) return;
     
-    // Buscar se existe convite com esse código
-    const invitesRef = collection(db, "invites");
-    const q = query(invitesRef, where("code", "==", inputCode), where("status", "==", "active"));
-    const snapshot = await getDocs(q);
-    
-    if (snapshot.empty) {
-      showToast("⚠️ Código inválido ou expirado.");
-      return;
-    }
-    
-    const inviteDoc = snapshot.docs[0];
-    const inviteData = inviteDoc.data();
-    
-    if (inviteData.senderId === userProfile.sub) {
-      showToast("⚠️ Você não pode usar seu próprio código.");
-      return;
-    }
+    try {
+      // Buscar se existe convite com esse código
+      const invitesRef = collection(db, "invites");
+      const q = query(invitesRef, where("code", "==", inputCode), where("status", "==", "active"));
+      const snapshot = await getDocs(q);
+      
+      if (snapshot.empty) {
+        showToast("⚠️ Código inválido ou expirado.");
+        return;
+      }
+      
+      const inviteDoc = snapshot.docs[0];
+      const inviteData = inviteDoc.data();
+      
+      if (inviteData.senderId === userProfile.sub) {
+        showToast("⚠️ Você não pode usar seu próprio código.");
+        return;
+      }
 
-    showToast("✓ Código enviado! Aguardando o dono aceitar...");
-    setShowJoinModal(false);
-    setInputCode("");
-    
-    // Atualizar o convite para pendente, notificando o dono
-    await updateDoc(doc(db, "invites", inviteDoc.id), {
-      status: "pending",
-      targetUserId: inviteData.senderId, // O dono recebe a notificação
-      requesterId: userProfile.sub,
-      requesterName: userProfile.given_name || userProfile.name || "Usuário"
-    });
+      showToast("✓ Código enviado! Aguardando o dono aceitar...");
+      setShowJoinModal(false);
+      setInputCode("");
+      
+      // Atualizar o convite para pendente, notificando o dono
+      await updateDoc(doc(db, "invites", inviteDoc.id), {
+        status: "pending",
+        targetUserId: inviteData.senderId, // O dono recebe a notificação
+        requesterId: userProfile.sub,
+        requesterName: userProfile.given_name || userProfile.name || "Usuário"
+      });
+    } catch (err) {
+      console.error("Erro ao usar código:", err);
+      showToast("❌ Erro ao acessar: " + err.message);
+    }
   };
 
   const acceptShare = async (notif) => {
-    // Ao aceitar, atualizamos a pasta para incluir o ID deste usuário
-    if (isConfigured && userProfile?.sub) {
-      await updateDoc(doc(db, "folders", notif.folderId), {
-        shared: true,
-        allowedUsers: arrayUnion(notif.requesterId)
-      });
-      await updateDoc(doc(db, "invites", notif.id), { status: "accepted" });
+    try {
+      // Ao aceitar, atualizamos a pasta para incluir o ID deste usuário
+      if (isConfigured && userProfile?.sub) {
+        await updateDoc(doc(db, "folders", notif.folderId), {
+          shared: true,
+          allowedUsers: arrayUnion(notif.requesterId)
+        });
+        await updateDoc(doc(db, "invites", notif.id), { status: "accepted" });
+      }
+      setNotifications(prev => prev.filter(n => n.id !== notif.id));
+      showToast(`✓ Acesso concedido a ${notif.requesterName || "usuário"}!`);
+    } catch (err) {
+      console.error("Erro ao aceitar convite:", err);
+      showToast("❌ Erro: " + err.message);
     }
-    setNotifications(prev => prev.filter(n => n.id !== notif.id));
-    showToast(`✓ Acesso concedido a ${notif.requesterName || "usuário"}!`);
   };
 
   return (
