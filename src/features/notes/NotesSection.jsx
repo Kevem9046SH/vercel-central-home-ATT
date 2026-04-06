@@ -167,7 +167,7 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
           status: "active"
         });
       } catch (err) {
-        console.error("Erro ao gerar código de compartilhamento:", err);
+        console.error("Erro completo ao gerar código de compartilhamento:", err);
         showToast("❌ Erro ao compartilhar: O navegador bloqueou a conexão ou você não está logado.");
       }
     }
@@ -207,7 +207,7 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
         requesterName: userProfile.given_name || userProfile.name || "Usuário"
       });
     } catch (err) {
-      console.error("Erro ao usar código:", err);
+      console.error("Erro completo ao usar código:", err);
       showToast("❌ Erro ao acessar: " + err.message);
     }
   };
