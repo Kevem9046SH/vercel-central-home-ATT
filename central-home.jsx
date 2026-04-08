@@ -11,7 +11,7 @@ import { StudySection } from "./src/features/study/StudySection.jsx";
 
 // Firebase App Data
 import { auth, isConfigured } from "./src/config/firebase.js";
-import { signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged } from "firebase/auth";
+import { signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from "firebase/auth";
 
 
 const IconMap = {
@@ -1268,7 +1268,12 @@ function GoogleAuthArea({ T, userProfile, setUserProfile, apiConfig, setShowApiS
       <div style={{ display: "flex", alignItems: "center", gap: 8, background: T.surface, border: `1px solid ${T.border}`, padding: "4px 12px 4px 4px", borderRadius: 20 }}>
         <img src={userProfile.picture} alt="Profile" referrerPolicy="no-referrer" style={{ width: 32, height: 32, borderRadius: "50%" }} />
         <span className="mobile-hide" style={{ fontSize: 13, fontWeight: 600, color: T.text, maxWidth: 120, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{userProfile.given_name || userProfile.name}</span>
-        <button onClick={() => { googleLogout(); setUserProfile(null); setGoogleToken(null); }}
+        <button onClick={async () => { 
+          if (auth) await signOut(auth);
+          googleLogout(); 
+          setUserProfile(null); 
+          setGoogleToken(null); 
+        }}
           style={{ width: 28, height: 28, borderRadius: "50%", background: T.bg, border: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: T.textMid, transition: "all .2s", marginLeft: 8 }}
           onMouseEnter={e => { e.currentTarget.style.color = T.coral; e.currentTarget.style.borderColor = T.coral; }}
           onMouseLeave={e => { e.currentTarget.style.color = T.textMid; e.currentTarget.style.borderColor = T.border; }}

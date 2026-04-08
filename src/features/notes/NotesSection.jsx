@@ -19,59 +19,61 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
   const activeFolder = (folders && folders.find(f => f.id === activeFolderId)) || (folders && folders[0]) || { name: "Geral", id: "f_general" };
   const filteredNotes = notes ? notes.filter(n => n.folderId === (activeFolder?.id || activeFolderId)) : [];
 
-   // Sincronização em tempo real com o Firestore (Pastas)
-   useEffect(() => {
-     // Check if Firebase is configured and we have a user profile
-     if (!isConfigured || !userProfile?.sub) {
-       return;
-     }
-     
-     // Check if auth is ready (handles the case where userProfile exists but auth.currentUser is null during sync)
-     if (!auth.currentUser) {
-       // Don't return early here - we still want to set up the listener
-       // but we'll skip the actual Firestore operations until auth is ready
-       return;
-     }
+  // Sincronização em tempo real com o Firestore (Pastas)
+  useEffect(() => {
+    // Check if Firebase is configured and we have a user profile
+    if (!isConfigured || !userProfile?.sub) {
+      return;
+    }
 
-     // Escutar pastas do usuário e pastas compartilhadas
-     const qFolders = query(
-       collection(db, "folders"), 
-       or(
-         where("ownerId", "==", userProfile.sub),
-         where("allowedUsers", "array-contains", userProfile.sub)
-       )
-     );
-     
-     const unsubFolders = onSnapshot(qFolders, async (snapshot) => {
-       const fbFolders = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-       if (fbFolders.length === 0 && auth.currentUser && isConfigured) {
-         // Criar pasta Geral automaticamente se não existir nada
-         try {
-           await addDoc(collection(db, "folders"), { 
-             name: "Geral", 
-             ownerId: userProfile.sub, 
-             shared: false,
-             allowedUsers: [] 
-           });
-         } catch (err) {
-           console.error("Erro ao criar pasta inicial:", err);
-           setFolders([{ id: "f_general", name: "Geral", icon: "Folder", color: "teal", ownerId: userProfile.sub }]);
-         }
-       } else {
-         setFolders(fbFolders);
-       }
-     });
+    // Escutar pastas do usuário e pastas compartilhadas
+    const qFolders = query(
+      collection(db, "folders"),
+      or(
+        where("ownerId", "==", userProfile.sub),
+        where("allowedUsers", "array-contains", userProfile.sub)
+      )
+    );
 
-     return () => unsubFolders();
-   }, [userProfile?.sub]);
+    const unsubFolders = onSnapshot(qFolders, async (snapshot) => {
+      // Check if auth is ready (handles the case where userProfile exists but auth.currentUser is null during sync)
+      if (!auth.currentUser) {
+        // Auth is still syncing, skip Firestore operations but keep listener active
+        if (isConfigured && userProfile?.sub) {
+          console.warn("Firestore: User profile exists but auth.currentUser is null. Waiting for auth sync...");
+        }
+        return;
+      }
+
+      const fbFolders = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (fbFolders.length === 0 && auth.currentUser && isConfigured) {
+        // Criar pasta Geral automaticamente se não existir nada
+        try {
+          await addDoc(collection(db, "folders"), {
+            name: "Geral",
+            ownerId: userProfile.sub,
+            shared: false,
+            allowedUsers: []
+          });
+        } catch (err) {
+          console.error("Erro ao criar pasta inicial:", err);
+          setFolders([{ id: "f_general", name: "Geral", icon: "Folder", color: "teal", ownerId: userProfile.sub }]);
+        }
+      } else {
+        setFolders(fbFolders);
+      }
+    });
+
+    return () => unsubFolders();
+  }, [userProfile?.sub]);
 
   // Sincronização em tempo real com o Firestore (Notas da Pasta Ativa)
   useEffect(() => {
     if (!isConfigured || !userProfile?.sub || !auth.currentUser) return;
-    
+
     const targetFolderId = activeFolder?.id || activeFolderId || "f_general";
     const qNotes = query(collection(db, "notes"), where("folderId", "==", targetFolderId));
-    
+
     const unsubNotes = onSnapshot(qNotes, (snapshot) => {
       const activeFbNotes = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       setNotes(prev => {
@@ -95,7 +97,7 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
 
   const saveNote = async (text) => {
     const isOnline = isConfigured && userProfile?.sub && auth.currentUser;
-    
+
     try {
       if (editingNote) {
         if (isOnline && !editingNote.id.toString().startsWith("temp_")) {
@@ -113,7 +115,7 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
           ownerId: userProfile?.sub || "local",
           createdAt: serverTimestamp()
         };
-        
+
         if (isOnline) {
           await addDoc(collection(db, "notes"), newNote);
         } else {
@@ -146,45 +148,45 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
     }
   };
 
-   const createFolder = async () => {
-     if (!folderName.trim()) return;
-     const newFolder = {
-       name: folderName.trim(),
-       ownerId: userProfile?.sub || "local",
-       shared: false,
-       allowedUsers: []
-     };
-     
-     try {
-       // Check if Firebase is configured and we have a user profile
-       if (!isConfigured || !userProfile?.sub) {
-         showToast("❌ Configuração inválida ou usuário não autenticado");
-         return;
-       }
-       
-       // Check if auth is ready (handles the case where userProfile exists but auth.currentUser is null during sync)
-       if (!auth.currentUser) {
-         showToast("⏳ Aguardando sincronização de autenticação... Tente novamente em um momento.");
-         return;
-       }
-       
-       await addDoc(collection(db, "folders"), newFolder);
-       
-       setFolderName("");
-       setShowFolderModal(false);
-       showToast("✓ Pasta criada");
-     } catch (err) {
-       console.error("Erro ao criar pasta:", err);
-       showToast("❌ Erro ao criar pasta: " + err.message);
-     }
-   };
+  const createFolder = async () => {
+    if (!folderName.trim()) return;
+    const newFolder = {
+      name: folderName.trim(),
+      ownerId: userProfile?.sub || "local",
+      shared: false,
+      allowedUsers: []
+    };
+
+    try {
+      // Check if Firebase is configured and we have a user profile
+      if (!isConfigured || !userProfile?.sub) {
+        showToast("❌ Configuração inválida ou usuário não autenticado");
+        return;
+      }
+
+      // Check if auth is ready (handles the case where userProfile exists but auth.currentUser is null during sync)
+      if (!auth.currentUser) {
+        showToast("⏳ Aguardando sincronização de autenticação... Tente novamente em um momento.");
+        return;
+      }
+
+      await addDoc(collection(db, "folders"), newFolder);
+
+      setFolderName("");
+      setShowFolderModal(false);
+      showToast("✓ Pasta criada");
+    } catch (err) {
+      console.error("Erro ao criar pasta:", err);
+      showToast("❌ Erro ao criar pasta: " + err.message);
+    }
+  };
 
   const generateCode = async (folder) => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setShareCode(code);
     setSharingFolder(folder);
     setShowShareModal(true);
-    
+
     if (isConfigured && userProfile?.sub) {
       try {
         await addDoc(collection(db, "invites"), {
@@ -205,21 +207,21 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
 
   const handleJoin = async () => {
     if (inputCode.length !== 6) return;
-    
+
     try {
       // Buscar se existe convite com esse código
       const invitesRef = collection(db, "invites");
       const q = query(invitesRef, where("code", "==", inputCode), where("status", "==", "active"));
       const snapshot = await getDocs(q);
-      
+
       if (snapshot.empty) {
         showToast("⚠️ Código inválido ou expirado.");
         return;
       }
-      
+
       const inviteDoc = snapshot.docs[0];
       const inviteData = inviteDoc.data();
-      
+
       if (inviteData.senderId === userProfile.sub) {
         showToast("⚠️ Você não pode usar seu próprio código.");
         return;
@@ -228,7 +230,7 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
       showToast("✓ Código enviado! Aguardando o dono aceitar...");
       setShowJoinModal(false);
       setInputCode("");
-      
+
       // Atualizar o convite para pendente, notificando o dono
       await updateDoc(doc(db, "invites", inviteDoc.id), {
         status: "pending",
@@ -273,16 +275,16 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
 
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           {folders.map(f => (
-            <div 
-              key={f.id} 
+            <div
+              key={f.id}
               onClick={() => setActiveFolderId(f.id)}
-              style={{ 
-                display: "flex", 
-                alignItems: "center", 
+              style={{
+                display: "flex",
+                alignItems: "center",
                 justifyContent: "space-between",
-                padding: "10px 14px", 
-                borderRadius: 12, 
-                background: activeFolderId === f.id ? T.bg : "none", 
+                padding: "10px 14px",
+                borderRadius: 12,
+                background: activeFolderId === f.id ? T.bg : "none",
                 color: activeFolderId === f.id ? T.text : T.muted,
                 cursor: "pointer",
                 fontSize: 14,
@@ -303,7 +305,7 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
           ))}
         </div>
 
-        <button 
+        <button
           onClick={() => setShowJoinModal(true)}
           style={{ width: "100%", marginTop: "1rem", display: "flex", alignItems: "center", gap: 8, padding: "10px", borderRadius: 10, border: `1px dashed ${T.border}`, background: "none", fontSize: 13, color: T.muted, cursor: "pointer", fontWeight: 600 }}
         >
@@ -353,16 +355,16 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "1.5rem" }}>
             {filteredNotes.map(n => (
-              <div 
-                key={n.id} 
+              <div
+                key={n.id}
                 onClick={() => setViewNote(n)}
-                style={{ 
+                style={{
                   aspectRatio: "1/1",
-                  background: T.surface, 
-                  border: `1px solid ${T.border}`, 
-                  borderRadius: 20, 
-                  padding: "1.5rem", 
-                  position: "relative", 
+                  background: T.surface,
+                  border: `1px solid ${T.border}`,
+                  borderRadius: 20,
+                  padding: "1.5rem",
+                  position: "relative",
                   cursor: "pointer",
                   transition: "all .2s cubic-bezier(0.4, 0, 0.2, 1)",
                   display: "flex",
@@ -423,7 +425,7 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
             </div>
             <h3 style={{ margin: "0 0 0.5rem 0", color: T.text }}>Compartilhar Pasta</h3>
             <p style={{ fontSize: 14, color: T.muted, marginBottom: "2rem" }}>Envie este código para seu amigo para ele acessar a pasta <b>{sharingFolder?.name}</b></p>
-            
+
             <div style={{ background: T.bg, padding: "1.5rem", borderRadius: 16, border: `2px dashed ${T.border}`, marginBottom: "2rem" }}>
               <span style={{ fontSize: 32, fontWeight: 700, letterSpacing: ".2em", color: T.text, fontFamily: "monospace" }}>{shareCode}</span>
             </div>
@@ -439,11 +441,11 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
           <div onClick={e => e.stopPropagation()} style={{ background: T.surface, borderRadius: 20, padding: "2rem", width: "100%", maxWidth: 400, boxShadow: "0 20px 40px rgba(0,0,0,.2)" }}>
             <h3 style={{ margin: "0 0 1rem 0", color: T.text }}>Entrar em Pasta</h3>
             <p style={{ fontSize: 13, color: T.muted, marginBottom: "1.5rem" }}>Insira o código de 6 dígitos que seu amigo enviou.</p>
-            <input 
-              autoFocus 
+            <input
+              autoFocus
               maxLength={6}
-              value={inputCode} 
-              onChange={e => setInputCode(e.target.value.replace(/\D/g, ""))} 
+              value={inputCode}
+              onChange={e => setInputCode(e.target.value.replace(/\D/g, ""))}
               placeholder="000000"
               style={{ width: "100%", background: T.bg, border: `1px solid ${T.border}`, padding: "14px", borderRadius: 12, color: T.text, marginBottom: "1.5rem", fontSize: 24, textAlign: "center", letterSpacing: ".5em", fontWeight: 700 }}
             />
@@ -461,13 +463,13 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
 function NoteModal({ onClose, onSave, T, editingNote = null }) {
   const [text, setText] = useState(editingNote?.text || "");
   const ta = useRef(null);
-  
+
   useEffect(() => { ta.current?.focus(); }, []);
 
   function handleKey(e) {
     if (e.key === "Escape") onClose();
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { 
-      if (text.trim()) onSave(text.trim()); 
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      if (text.trim()) onSave(text.trim());
     }
   }
 
@@ -476,7 +478,7 @@ function NoteModal({ onClose, onSave, T, editingNote = null }) {
       <div onClick={e => e.stopPropagation()} style={{ background: T.surface, borderRadius: 24, border: `1px solid ${T.border}`, padding: "2rem", width: "100%", maxWidth: 550, boxShadow: "0 20px 60px rgba(0,0,0,.25)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, letterSpacing: ".1em", textTransform: "uppercase" }}>{editingNote ? "Editar nota" : "Nova nota"}</p>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: T.faint }}><X size={20}/></button>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: T.faint }}><X size={20} /></button>
         </div>
         <textarea
           ref={ta}
@@ -507,9 +509,9 @@ function NoteViewModal({ note, onClose, onEdit, onDelete, T }) {
             <Calendar size={14} /> {note.date}
           </div>
           <div style={{ display: "flex", gap: 12 }}>
-            <button onClick={() => onEdit(note)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600 }}><Edit2 size={16}/> Editar</button>
-            <button onClick={() => onDelete(note.id)} style={{ background: "none", border: "none", color: T.coral, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600 }}><Trash size={16}/> Excluir</button>
-            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: T.faint, marginLeft: 8 }}><X size={24}/></button>
+            <button onClick={() => onEdit(note)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600 }}><Edit2 size={16} /> Editar</button>
+            <button onClick={() => onDelete(note.id)} style={{ background: "none", border: "none", color: T.coral, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600 }}><Trash size={16} /> Excluir</button>
+            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: T.faint, marginLeft: 8 }}><X size={24} /></button>
           </div>
         </div>
         <div style={{ flex: 1, overflowY: "auto", fontSize: 17, color: T.text, lineHeight: 1.8, whiteSpace: "pre-wrap", paddingBottom: "1rem" }}>
