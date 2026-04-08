@@ -19,46 +19,51 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
   const activeFolder = (folders && folders.find(f => f.id === activeFolderId)) || (folders && folders[0]) || { name: "Geral", id: "f_general" };
   const filteredNotes = notes ? notes.filter(n => n.folderId === (activeFolder?.id || activeFolderId)) : [];
 
-  // Sincronização em tempo real com o Firestore (Pastas)
-  useEffect(() => {
-    if (!isConfigured || !userProfile?.sub || !auth.currentUser) {
-      if (isConfigured && userProfile?.sub && !auth.currentUser) {
-        console.warn("Firestore: User profile exists but auth.currentUser is null. Waiting for auth sync...");
-      }
-      return;
-    }
+   // Sincronização em tempo real com o Firestore (Pastas)
+   useEffect(() => {
+     // Check if Firebase is configured and we have a user profile
+     if (!isConfigured || !userProfile?.sub) {
+       return;
+     }
+     
+     // Check if auth is ready (handles the case where userProfile exists but auth.currentUser is null during sync)
+     if (!auth.currentUser) {
+       // Don't return early here - we still want to set up the listener
+       // but we'll skip the actual Firestore operations until auth is ready
+       return;
+     }
 
-    // Escutar pastas do usuário e pastas compartilhadas
-    const qFolders = query(
-      collection(db, "folders"), 
-      or(
-        where("ownerId", "==", userProfile.sub),
-        where("allowedUsers", "array-contains", userProfile.sub)
-      )
-    );
-    
-    const unsubFolders = onSnapshot(qFolders, async (snapshot) => {
-      const fbFolders = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      if (fbFolders.length === 0 && auth.currentUser && isConfigured) {
-        // Criar pasta Geral automaticamente se não existir nada
-        try {
-          await addDoc(collection(db, "folders"), { 
-            name: "Geral", 
-            ownerId: userProfile.sub, 
-            shared: false,
-            allowedUsers: [] 
-          });
-        } catch (err) {
-          console.error("Erro ao criar pasta inicial:", err);
-          setFolders([{ id: "f_general", name: "Geral", icon: "Folder", color: "teal", ownerId: userProfile.sub }]);
-        }
-      } else {
-        setFolders(fbFolders);
-      }
-    });
+     // Escutar pastas do usuário e pastas compartilhadas
+     const qFolders = query(
+       collection(db, "folders"), 
+       or(
+         where("ownerId", "==", userProfile.sub),
+         where("allowedUsers", "array-contains", userProfile.sub)
+       )
+     );
+     
+     const unsubFolders = onSnapshot(qFolders, async (snapshot) => {
+       const fbFolders = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+       if (fbFolders.length === 0 && auth.currentUser && isConfigured) {
+         // Criar pasta Geral automaticamente se não existir nada
+         try {
+           await addDoc(collection(db, "folders"), { 
+             name: "Geral", 
+             ownerId: userProfile.sub, 
+             shared: false,
+             allowedUsers: [] 
+           });
+         } catch (err) {
+           console.error("Erro ao criar pasta inicial:", err);
+           setFolders([{ id: "f_general", name: "Geral", icon: "Folder", color: "teal", ownerId: userProfile.sub }]);
+         }
+       } else {
+         setFolders(fbFolders);
+       }
+     });
 
-    return () => unsubFolders();
-  }, [userProfile?.sub]);
+     return () => unsubFolders();
+   }, [userProfile?.sub]);
 
   // Sincronização em tempo real com o Firestore (Notas da Pasta Ativa)
   useEffect(() => {
@@ -141,33 +146,38 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
     }
   };
 
-  const createFolder = async () => {
-    if (!folderName.trim()) return;
-    const newFolder = {
-      name: folderName.trim(),
-      ownerId: userProfile?.sub || "local",
-      shared: false,
-      allowedUsers: []
-    };
-    
-    try {
-      if (isConfigured && userProfile?.sub) {
-        if (!auth.currentUser) {
-           throw new Error("Sessão expirada ou não sincronizada. Tente recarregar a página.");
-        }
-        await addDoc(collection(db, "folders"), newFolder);
-      } else {
-        setFolders([...folders, { id: "f_" + Date.now(), ...newFolder }]);
-      }
-      
-      setFolderName("");
-      setShowFolderModal(false);
-      showToast("✓ Pasta criada");
-    } catch (err) {
-      console.error("Erro ao criar pasta:", err);
-      showToast("❌ Erro ao criar pasta: " + err.message);
-    }
-  };
+   const createFolder = async () => {
+     if (!folderName.trim()) return;
+     const newFolder = {
+       name: folderName.trim(),
+       ownerId: userProfile?.sub || "local",
+       shared: false,
+       allowedUsers: []
+     };
+     
+     try {
+       // Check if Firebase is configured and we have a user profile
+       if (!isConfigured || !userProfile?.sub) {
+         showToast("❌ Configuração inválida ou usuário não autenticado");
+         return;
+       }
+       
+       // Check if auth is ready (handles the case where userProfile exists but auth.currentUser is null during sync)
+       if (!auth.currentUser) {
+         showToast("⏳ Aguardando sincronização de autenticação... Tente novamente em um momento.");
+         return;
+       }
+       
+       await addDoc(collection(db, "folders"), newFolder);
+       
+       setFolderName("");
+       setShowFolderModal(false);
+       showToast("✓ Pasta criada");
+     } catch (err) {
+       console.error("Erro ao criar pasta:", err);
+       showToast("❌ Erro ao criar pasta: " + err.message);
+     }
+   };
 
   const generateCode = async (folder) => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();

@@ -1310,27 +1310,33 @@ function GoogleAuthArea({ T, userProfile, setUserProfile, apiConfig, setShowApiS
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         // Usuário logado no Firebase: garantir que o perfil local está correto
-        if (!userProfile || userProfile.sub !== user.uid) {
-          console.log("Sincronizando perfil com Firebase Auth...");
-          setUserProfile({
-            sub: user.uid,
-            name: user.displayName,
-            given_name: user.displayName?.split(' ')[0] || "Usuário",
-            picture: user.photoURL,
-            email: user.email
-          });
-        }
+        setUserProfile(prev => {
+          if (!prev || prev.sub !== user.uid) {
+            console.log("Sincronizando perfil com Firebase Auth...");
+            return {
+              sub: user.uid,
+              name: user.displayName,
+              given_name: user.displayName?.split(' ')[0] || "Usuário",
+              picture: user.photoURL,
+              email: user.email
+            };
+          }
+          return prev;
+        });
       } else {
         // Usuário deslogado no Firebase: limpar estado se necessário
-        if (userProfile) {
-          console.warn("Nenhuma sessão Firebase ativa. Limpando perfil local.");
-          setUserProfile(null);
-          setGoogleToken(null);
-        }
+        setUserProfile(prev => {
+          if (prev) {
+            console.warn("Nenhuma sessão Firebase ativa. Limpando perfil local.");
+            setGoogleToken(null);
+            return null;
+          }
+          return prev;
+        });
       }
     });
     return () => unsubscribe();
-  }, [userProfile]);
+  }, [isConfigured, setGoogleToken, setUserProfile]);
 
   const handleFirebaseLogin = async () => {
     if (!auth) return;
@@ -1340,25 +1346,20 @@ function GoogleAuthArea({ T, userProfile, setUserProfile, apiConfig, setShowApiS
       provider.addScope("https://www.googleapis.com/auth/classroom.coursework.me.readonly");
       provider.addScope("https://www.googleapis.com/auth/classroom.courses.readonly");
 
-      if (isProduction) {
-        // In production (HTTPS/Vercel), use redirect to avoid popup-blocking issues
-        await signInWithRedirect(auth, provider);
-      } else {
-        // In localhost (HTTP), popup is fine and faster for development
-        const result = await signInWithPopup(auth, provider);
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-        setUserProfile({
-          sub: result.user.uid,
-          name: result.user.displayName,
-          given_name: result.user.displayName?.split(' ')[0] || "Usuário",
-          picture: result.user.photoURL,
-          email: result.user.email
-        });
-        if (credential?.accessToken) setGoogleToken(credential.accessToken);
-        else setGoogleToken(null);
-      }
+      // Usar popup para evitar problemas de cookie de terceiros no Firefox/Safari com redirect
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      setUserProfile({
+        sub: result.user.uid,
+        name: result.user.displayName,
+        given_name: result.user.displayName?.split(' ')[0] || "Usuário",
+        picture: result.user.photoURL,
+        email: result.user.email
+      });
+      if (credential?.accessToken) setGoogleToken(credential.accessToken);
+      else setGoogleToken(null);
     } catch (error) {
-      if (error.code !== 'auth/popup-closed-by-user') console.error(error);
+      if (error.code !== 'auth/popup-closed-by-user') console.error("Erro no login Firebase:", error);
     }
   };
 
