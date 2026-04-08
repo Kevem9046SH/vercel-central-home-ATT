@@ -1287,21 +1287,50 @@ function GoogleAuthArea({ T, userProfile, setUserProfile, apiConfig, setShowApiS
     if (!auth || !isConfigured) return;
     getRedirectResult(auth)
       .then((result) => {
-        if (!result) return; // No redirect result, normal flow
+        if (!result) return;
         const credential = GoogleAuthProvider.credentialFromResult(result);
-        setUserProfile({
+        const newUser = {
           sub: result.user.uid,
           name: result.user.displayName,
           given_name: result.user.displayName?.split(' ')[0] || "Usuário",
           picture: result.user.photoURL,
           email: result.user.email
-        });
+        };
+        setUserProfile(newUser);
         if (credential?.accessToken) setGoogleToken(credential.accessToken);
       })
       .catch((err) => {
         if (err.code !== 'auth/no-auth-event') console.error("Redirect login error:", err);
       });
   }, []);
+
+  // Sincronizar o estado do perfil com o Firebase Auth real
+  useEffect(() => {
+    if (!auth || !isConfigured) return;
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // Usuário logado no Firebase: garantir que o perfil local está correto
+        if (!userProfile || userProfile.sub !== user.uid) {
+          console.log("Sincronizando perfil com Firebase Auth...");
+          setUserProfile({
+            sub: user.uid,
+            name: user.displayName,
+            given_name: user.displayName?.split(' ')[0] || "Usuário",
+            picture: user.photoURL,
+            email: user.email
+          });
+        }
+      } else {
+        // Usuário deslogado no Firebase: limpar estado se necessário
+        if (userProfile) {
+          console.warn("Nenhuma sessão Firebase ativa. Limpando perfil local.");
+          setUserProfile(null);
+          setGoogleToken(null);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [userProfile]);
 
   const handleFirebaseLogin = async () => {
     if (!auth) return;

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Plus, X, Maximize2, Calendar, Share2, FolderPlus, UserPlus, Bell, Check, Trash2 as Trash, Edit2 } from "lucide-react";
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, serverTimestamp, getDocs, arrayUnion, or } from "firebase/firestore";
-import { db, isConfigured } from "../../config/firebase";
+import { db, auth, isConfigured } from "../../config/firebase";
 
 export function NotesSection({ T, notes, setNotes, showToast, folders, setFolders, activeFolderId, setActiveFolderId, userProfile }) {
   const [showNote, setShowNote] = useState(false);
@@ -21,7 +21,12 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
 
   // Sincronização em tempo real com o Firestore (Pastas)
   useEffect(() => {
-    if (!isConfigured || !userProfile?.sub) return;
+    if (!isConfigured || !userProfile?.sub || !auth.currentUser) {
+      if (isConfigured && userProfile?.sub && !auth.currentUser) {
+        console.warn("Firestore: User profile exists but auth.currentUser is null. Waiting for auth sync...");
+      }
+      return;
+    }
 
     // Escutar pastas do usuário e pastas compartilhadas
     const qFolders = query(
@@ -32,10 +37,21 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
       )
     );
     
-    const unsubFolders = onSnapshot(qFolders, (snapshot) => {
+    const unsubFolders = onSnapshot(qFolders, async (snapshot) => {
       const fbFolders = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      if (fbFolders.length === 0) {
-        setFolders([{ id: "f_general", name: "Geral", icon: "Folder", color: "teal", ownerId: userProfile.sub }]);
+      if (fbFolders.length === 0 && auth.currentUser && isConfigured) {
+        // Criar pasta Geral automaticamente se não existir nada
+        try {
+          await addDoc(collection(db, "folders"), { 
+            name: "Geral", 
+            ownerId: userProfile.sub, 
+            shared: false,
+            allowedUsers: [] 
+          });
+        } catch (err) {
+          console.error("Erro ao criar pasta inicial:", err);
+          setFolders([{ id: "f_general", name: "Geral", icon: "Folder", color: "teal", ownerId: userProfile.sub }]);
+        }
       } else {
         setFolders(fbFolders);
       }
@@ -46,7 +62,7 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
 
   // Sincronização em tempo real com o Firestore (Notas da Pasta Ativa)
   useEffect(() => {
-    if (!isConfigured || !userProfile?.sub) return;
+    if (!isConfigured || !userProfile?.sub || !auth.currentUser) return;
     
     const targetFolderId = activeFolder?.id || activeFolderId || "f_general";
     const qNotes = query(collection(db, "notes"), where("folderId", "==", targetFolderId));
@@ -64,7 +80,7 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
 
   // Escutar notificações (convites onde alguém inseriu nosso código ou requests)
   useEffect(() => {
-    if (!isConfigured || !userProfile?.sub) return;
+    if (!isConfigured || !userProfile?.sub || !auth.currentUser) return;
     const qInvites = query(collection(db, "invites"), where("targetUserId", "==", userProfile.sub), where("status", "==", "pending"));
     const unsubInvites = onSnapshot(qInvites, (snapshot) => {
       setNotifications(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -73,7 +89,7 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
   }, [userProfile?.sub]);
 
   const saveNote = async (text) => {
-    const isOnline = isConfigured && userProfile?.sub;
+    const isOnline = isConfigured && userProfile?.sub && auth.currentUser;
     
     try {
       if (editingNote) {
@@ -130,11 +146,15 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
     const newFolder = {
       name: folderName.trim(),
       ownerId: userProfile?.sub || "local",
-      shared: false
+      shared: false,
+      allowedUsers: []
     };
     
     try {
       if (isConfigured && userProfile?.sub) {
+        if (!auth.currentUser) {
+           throw new Error("Sessão expirada ou não sincronizada. Tente recarregar a página.");
+        }
         await addDoc(collection(db, "folders"), newFolder);
       } else {
         setFolders([...folders, { id: "f_" + Date.now(), ...newFolder }]);
