@@ -21,12 +21,13 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
 
   // Sincronização em tempo real com o Firestore (Pastas)
   useEffect(() => {
-    // Check if Firebase is configured and we have a user profile
-    if (!isConfigured || !userProfile?.sub) {
+    // Check if Firebase is configured and we have a real user profile (not local)
+    if (!isConfigured || !userProfile?.sub || userProfile.sub === "local") {
+      // In local mode or not configured, don't attempt Firestore sync
       return;
     }
 
-    // Escutar pastas do usuário e pastas compartilhadas
+    // Prepare query for user folders and shared folders
     const qFolders = query(
       collection(db, "folders"),
       or(
@@ -36,18 +37,12 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
     );
 
     const unsubFolders = onSnapshot(qFolders, async (snapshot) => {
-      // Check if auth is ready (handles the case where userProfile exists but auth.currentUser is null during sync)
-      if (!auth.currentUser) {
-        // Auth is still syncing, skip Firestore operations but keep listener active
-        if (isConfigured && userProfile?.sub) {
-          console.warn("Firestore: User profile exists but auth.currentUser is null. Waiting for auth sync...");
-        }
-        return;
-      }
+      // Robustness check: if auth is lost during session, stop processing
+      if (!auth.currentUser) return;
 
       const fbFolders = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      if (fbFolders.length === 0 && auth.currentUser && isConfigured) {
-        // Criar pasta Geral automaticamente se não existir nada
+      if (fbFolders.length === 0) {
+        // Criar pasta Geral automaticamente se não existir nada e for um usuário real
         try {
           await addDoc(collection(db, "folders"), {
             name: "Geral",
@@ -57,15 +52,38 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
           });
         } catch (err) {
           console.error("Erro ao criar pasta inicial:", err);
-          setFolders([{ id: "f_general", name: "Geral", icon: "Folder", color: "teal", ownerId: userProfile.sub }]);
         }
       } else {
         setFolders(fbFolders);
       }
+    }, (error) => {
+      // Silence expected permission errors during logout/transition
+      if (error.code !== "permission-denied") {
+        console.error("Firestore [folders] listener error:", error);
+      }
     });
 
-    return () => unsubFolders();
-  }, [userProfile?.sub]);
+    // Escutar notificações (convites pendentes)
+    const qInvites = query(
+      collection(db, "invites"),
+      where("targetUserId", "==", userProfile.sub),
+      where("status", "==", "pending")
+    );
+
+    const unsubInvites = onSnapshot(qInvites, (snapshot) => {
+      if (!auth.currentUser) return;
+      setNotifications(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      if (error.code !== "permission-denied") {
+        console.error("Firestore [invites] listener error:", error);
+      }
+    });
+
+    return () => {
+      unsubFolders();
+      unsubInvites();
+    };
+  }, [isConfigured, userProfile?.sub]);
 
   // Sincronização em tempo real com o Firestore (Notas da Pasta Ativa)
   useEffect(() => {
@@ -80,23 +98,17 @@ export function NotesSection({ T, notes, setNotes, showToast, folders, setFolder
         const otherNotes = prev.filter(n => n.folderId !== targetFolderId);
         return [...otherNotes, ...activeFbNotes];
       });
+    }, (error) => {
+      if (error.code !== "permission-denied") {
+        console.error("Firestore [notes] listener error:", error);
+      }
     });
 
     return () => unsubNotes();
   }, [userProfile?.sub, activeFolder?.id, activeFolderId]);
 
-  // Escutar notificações (convites onde alguém inseriu nosso código ou requests)
-  useEffect(() => {
-    if (!isConfigured || !userProfile?.sub || !auth.currentUser) return;
-    const qInvites = query(collection(db, "invites"), where("targetUserId", "==", userProfile.sub), where("status", "==", "pending"));
-    const unsubInvites = onSnapshot(qInvites, (snapshot) => {
-      setNotifications(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    return () => unsubInvites();
-  }, [userProfile?.sub]);
-
   const saveNote = async (text) => {
-    const isOnline = isConfigured && userProfile?.sub && auth.currentUser;
+    const isOnline = isConfigured && userProfile?.sub && auth.currentUser && userProfile.sub !== "local";
 
     try {
       if (editingNote) {
